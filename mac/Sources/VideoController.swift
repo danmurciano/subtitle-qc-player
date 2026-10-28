@@ -63,16 +63,17 @@ final class VideoController: NSObject {
         guard id == loadId, it === item else { return }
         switch it.status {
         case .readyToPlay:
-            Task { [weak self] in
-                var w = 0.0, h = 0.0
+            let duration = it.duration.seconds.finiteOr(0), canReverse = it.canPlayReverse
+            Task {
+                var size = CGSize.zero
                 if let tracks = try? await asset.loadTracks(withMediaType: .video), let track = tracks.first,
                    let geo = try? await track.load(.naturalSize, .preferredTransform) {
-                    let s = geo.0.applying(geo.1); w = abs(Double(s.width)); h = abs(Double(s.height))
+                    let s = geo.0.applying(geo.1); size = CGSize(width: abs(s.width), height: abs(s.height))
                 }
-                await MainActor.run {
+                let w = Double(size.width), h = Double(size.height)
+                DispatchQueue.main.async { [weak self] in
                     guard let self = self, id == self.loadId else { return }
-                    self.bridge?.emit("videoMeta", ["id": id, "duration": it.duration.seconds.finiteOr(0), "width": w, "height": h,
-                                                    "canReverse": it.canPlayReverse])
+                    self.bridge?.emit("videoMeta", ["id": id, "duration": duration, "width": w, "height": h, "canReverse": canReverse])
                 }
             }
         case .failed:
