@@ -12,14 +12,30 @@ APP="$ROOT/build/Subtitle QC.app"
 rm -rf "$ROOT/build"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# Runs a step; on failure reports each error as a GitHub annotation (readable without the full log).
+run() {
+  local log="$ROOT/build/step.log"
+  if "$@" >"$log" 2>&1; then cat "$log"; return 0; fi
+  cat "$log"
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    grep -E "error:" "$log" | head -45 | while IFS= read -r line; do
+      f="$(echo "$line" | sed -nE 's#^.*/([^/:]+):([0-9]+):([0-9]+): error: .*#\1:\2#p')"
+      m="$(echo "$line" | sed -E 's#^.*: error: ##')"
+      echo "::error::${f:+$f }$m"
+    done
+    echo "::error::Last lines: $(tail -15 "$log" | tr '\n' '|' | cut -c1-3000)"
+  fi
+  exit 1
+}
+
 # 1. The interface (same single page as the web version)
-(cd "$ROOT/web" && python3 build.py)
+run bash -c "cd '$ROOT/web' && python3 build.py"
 cp "$ROOT/web/dist/Subtitle_QC.html" "$APP/Contents/Resources/index.html"
 
 # 2. The native shell, once per CPU type, then joined into one universal binary
 SDK="$(xcrun --show-sdk-path --sdk macosx)"
 for ARCH in arm64 x86_64; do
-  xcrun swiftc -O -swift-version 5 -module-name SubtitleQC -target "$ARCH-apple-macos13.0" -sdk "$SDK" \
+  run xcrun swiftc -O -swift-version 5 -module-name SubtitleQC -target "$ARCH-apple-macos13.0" -sdk "$SDK" \
     "$ROOT"/mac/Sources/*.swift -o "$ROOT/build/SubtitleQC-$ARCH"
 done
 lipo -create "$ROOT/build/SubtitleQC-arm64" "$ROOT/build/SubtitleQC-x86_64" -output "$APP/Contents/MacOS/SubtitleQC"
