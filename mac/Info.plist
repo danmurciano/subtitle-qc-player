@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Subtitle QC</string>
+  <key>CFBundleDisplayName</key><string>Subtitle QC</string>
+  <key>CFBundleIdentifier</key><string>com.danmurciano.subtitleqc</string>
+  <key>CFBundleExecutable</key><string>SubtitleQC</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleVersion</key><string>__BUILD__</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSHumanReadableCopyright</key><string>Subtitle QC</string>
+  <key>NSDocumentsFolderUsageDescription</key><string>Subtitle QC reads the video and subtitle folders you choose.</string>
+  <key>NSDesktopFolderUsageDescription</key><string>Subtitle QC reads the video and subtitle folders you choose.</string>
+  <key>NSDownloadsFolderUsageDescription</key><string>Subtitle QC reads the video and subtitle folders you choose.</string>
+  <key>NSRemovableVolumesUsageDescription</key><string>Subtitle QC reads the video and subtitle folders you choose.</string>
+  <key>NSNetworkVolumesUsageDescription</key><string>Subtitle QC reads the video and subtitle folders you choose.</string>
+</dict>
+</plist>

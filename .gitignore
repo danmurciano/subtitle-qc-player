@@ -1,0 +1,5 @@
+build/
+web/dist/
+web/src/player.js
+.DS_Store
+__pycache__/

@@ -1,0 +1,1539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>MK IMSCR Subtitle Player</title>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f25;
+    --border: #2c3038;
+    --text: #e8e9ec;
+    --dim: #8a8f99;
+    --accent: #6fa8ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 60px;
+  }
+  h1 {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+    color: var(--dim);
+    margin: 0 0 18px;
+  }
+  .controls {
+    width: 100%;
+    max-width: 1240px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+  .field {
+    flex: 1 1 260px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+  .field label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .field input[type="file"] {
+    color: var(--text);
+    font-size: 13px;
+    width: 100%;
+  }
+  .status {
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 4px;
+    min-height: 16px;
+  }
+  .status.err { color: #ff8080; }
+  .status.ok { color: #7ad78e; }
+  .layout {
+    width: 100%;
+    max-width: 1240px;
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .stage {
+    position: relative;
+    flex: 1 1 640px;
+    min-width: 280px;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .stage video {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #000;
+  }
+  #subtitleOverlay {
+    position: absolute;
+    top: 0; left: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .sidebar {
+    flex: 0 1 300px;
+    min-width: 220px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow-y: auto;
+    max-height: 540px;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--panel);
+  }
+  .sidebar-header {
+    padding: 10px 14px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--dim);
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-empty {
+    padding: 14px;
+    font-size: 12.5px;
+    color: var(--dim);
+  }
+  .cue-item {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  .cue-item:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  .cue-item.active {
+    background: rgba(111,168,255,0.15);
+    border-left: 3px solid var(--accent);
+    padding-left: 11px;
+  }
+  .cue-item.overlap {
+    background: rgba(255,90,90,0.12);
+    border-left: 3px solid #ff5a5a;
+    padding-left: 11px;
+  }
+  .cue-item.overlap.active {
+    background: rgba(255,90,90,0.22);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+  .cue-region-tag {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--dim);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-chip {
+    background: var(--bg);
+    color: var(--dim);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 3px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: inherit;
+  }
+  .filter-chip:hover { color: var(--text); }
+  .filter-chip.active { background: rgba(111,168,255,0.15); border-color: var(--accent); color: var(--text); }
+  .filter-chip.overlap.active { border-color: #ff5a5a; background: rgba(255,90,90,0.15); }
+  .filter-chip.lines.active { border-color: #ffb347; background: rgba(255,179,71,0.15); }
+  .filter-chip.chars.active { border-color: #c792ea; background: rgba(199,146,234,0.15); }
+  .filter-chip.duration.active { border-color: #4fd1c5; background: rgba(79,209,197,0.15); }
+  .filter-chip.duration-critical.active { border-color: #ff3db8; background: rgba(255,61,184,0.18); }
+  .filter-chip.suspicious.active { border-color: #ffd23f; background: rgba(255,210,63,0.18); }
+  .search-bar {
+    display: flex; gap: 6px; align-items: center;
+    padding: 8px 10px 0 10px;
+  }
+  .search-bar input {
+    flex: 1 1 auto; min-width: 0;
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 12px;
+  }
+  .search-bar button {
+    background: var(--bg); color: var(--dim); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 8px; font-size: 11px; cursor: pointer; white-space: nowrap;
+  }
+  .search-bar button.active { color: var(--text); border-color: var(--accent); background: rgba(111,168,255,0.15); }
+  .search-status { padding: 4px 10px 0 10px; font-size: 11px; color: var(--dim); min-height: 14px; }
+  .search-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-right: 10px;
+  }
+  .search-status-row .status { flex: 1 1 auto; }
+  .translate-btn {
+    flex: 0 0 auto;
+    background: var(--bg); color: var(--dim); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 9px; font-size: 11px; cursor: pointer; white-space: nowrap;
+    font-family: inherit;
+  }
+  .translate-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+  .translate-btn:disabled { opacity: 0.55; cursor: default; }
+  .cue-translation {
+    display: block;
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px dashed var(--border);
+    color: var(--dim);
+    font-size: 12px;
+    font-style: italic;
+  }
+  .cue-translation .translate-lang-tag {
+    display: inline-block;
+    font-style: normal;
+    font-size: 10px;
+    color: var(--accent);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-right: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    vertical-align: middle;
+  }
+  .cue-translation.unavailable { color: #ff8080; font-style: normal; }
+  .suspicious-char {
+    display: inline-block;
+    background: #4a1f00; color: #ffd23f; border: 1px solid #ffd23f;
+    border-radius: 3px; font-size: 10px; line-height: 1.4; padding: 0 3px;
+    margin: 0 1px; cursor: pointer; font-family: ui-monospace, monospace;
+    vertical-align: baseline;
+  }
+  .suspicious-char:hover { background: #ffd23f; color: #1a1a1a; }
+  .suspicious-char.search-hit { box-shadow: 0 0 0 2px #6fa8ff; }
+  mark.search-hit-text { background: #6fa8ff; color: #0a0a0a; border-radius: 2px; padding: 0 1px; }
+  .flag-tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    border-radius: 3px;
+    padding: 0 4px;
+    margin-left: 4px;
+    vertical-align: middle;
+    color: #14161a;
+  }
+  .flag-tag.flag-overlap { background: #ff5a5a; }
+  .flag-tag.flag-lines { background: #ffb347; }
+  .flag-tag.flag-chars { background: #c792ea; }
+  .flag-tag.flag-duration { background: #4fd1c5; }
+  .flag-tag.flag-duration-critical { background: #ff3db8; box-shadow: 0 0 0 1px rgba(255,61,184,0.5); }
+  .flag-tag.flag-suspicious { background: #ffd23f; color: #1a1a1a; }
+  .cue-time {
+    display: block;
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cue-text {
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .placeholder {
+    aspect-ratio: 16/9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--dim);
+    font-size: 13px;
+  }
+  .hint {
+    max-width: 1240px;
+    width: 100%;
+    margin-top: 14px;
+    font-size: 12px;
+    color: var(--dim);
+    line-height: 1.5;
+  }
+  .hint code {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-size: 11.5px;
+  }
+</style>
+</head>
+<body>
+
+<h1>MK IMSCR Subtitle Player</h1>
+
+<div id="libBanner" style="display:none; max-width:960px; width:100%; margin-bottom:14px; padding:12px 14px; border-radius:8px; font-size:13px; line-height:1.5;"></div>
+
+<div class="controls">
+  <div class="field">
+    <label for="videoInput">Video file</label>
+    <input type="file" id="videoInput" accept="video/*" />
+    <div class="status" id="videoStatus"></div>
+  </div>
+  <div class="field">
+    <label for="subInput">Subtitle file (.imscr / .ttml / .xml)</label>
+    <input type="file" id="subInput" accept=".xml,.ttml,.imscr,text/xml,application/ttml+xml" />
+    <div class="status" id="subStatus"></div>
+  </div>
+  <div class="field" style="flex: 1 1 300px;">
+    <label for="offsetInput">Offset — burn-in timecode at start (h:mm:ss:ff, optional leading −/+)</label>
+    <div style="display:flex; gap:6px; align-items:center;">
+      <input type="text" id="offsetInput" value="00:57:50:00"
+             style="width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:13px;" />
+      <button type="button" id="offsetFlip" title="Flip sign"
+              style="background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 9px; font-size:13px; cursor:pointer;">±</button>
+    </div>
+    <div class="status" id="offsetStatus">Enter the frame-accurate timecode (hh:mm:ss:ff) burned into the start of the video.</div>
+  </div>
+  <div class="field" style="flex: 0 1 190px;">
+    <label for="qcFrameRateInput">File's frame rate (confirm vs. video)</label>
+    <input type="text" id="qcFrameRateInput" value="23.976"
+           style="width:100%; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:5px 8px; font-size:13px;" />
+    <div class="status" id="qcFrameRateStatus">Auto-filled once a subtitle file loads — confirm it matches the video's actual frame rate.</div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="stage" id="stage">
+    <div class="placeholder" id="placeholder">Load a video to begin</div>
+  </div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-sticky">
+      <div class="sidebar-header">Subtitle events</div>
+      <div class="search-bar">
+        <input type="text" id="searchInput" placeholder="Search cue text — paste a character to find more of it" />
+        <button type="button" id="searchCaseToggle" title="Toggle case-sensitive matching">Aa</button>
+        <button type="button" id="searchClear" title="Clear search">Clear</button>
+      </div>
+      <div class="search-status-row">
+        <div class="status" id="searchStatus"></div>
+        <button type="button" id="translateBtn" class="translate-btn" title="Translate the subtitle events currently visible in this box to English">Translate</button>
+      </div>
+      <div class="filter-bar" id="filterBar"></div>
+    </div>
+    <div class="sidebar-empty" id="sidebarEmpty">Load a subtitle file to see a clickable list of events.</div>
+    <div class="sidebar-empty" id="filterEmptyMsg" style="display:none;">No cues match this filter.</div>
+    <div id="cueListContainer"></div>
+  </div>
+</div>
+
+<div class="hint">
+  Runs entirely in your browser — nothing is uploaded anywhere. A small language model is 
+  downloaded (and cached) the first time a new language is detected. This feature requires
+  Chrome 138 or later.
+  <br /><br />
+  The offset shifts subtitle timing to match the video without editing the subtitle file. Enter
+  the frame-accurate timecode burned into the start of the video (h:mm:ss:ff) — it's converted to
+  real seconds using the loaded subtitle file's own declared frame rate. A positive value shows
+  subtitles that many seconds <em>earlier</em> than their file timestamps; negative delays them.
+  Hit ± to flip the sign, or edit the field directly.
+  <br /><br />
+  <strong>Keyboard shortcuts</strong> (once a video is loaded, and you're not typing in a field):
+  <code>Space</code>/<code>K</code> play/pause · <code>←</code>/<code>→</code> step back/forward
+  roughly one frame (an approximation — HTML5 video can't reliably report true frame rate, so this
+  steps by 1/30s, drifting slightly on 24fps/25fps sources) · <code>Shift+←</code>/<code>Shift+→</code>
+  jump 5 seconds · <code>L</code> fast-forward, press again to speed up (2x → 4x → 8x) · <code>J</code>
+  rewind similarly — note this is <em>simulated</em> by rapid backward seeking, not true reverse
+  playback, since browsers don't reliably support that. This function tends to run away on itself,
+  so I'd use it sparringly. Clicking any line in the subtitle list jumps the video to that line, 
+  honoring the current offset.
+</div>
+
+<script>
+// --- Resilient loader for the imscJS library (tries two CDNs, then gives up loudly) ---
+(function loadImscLibrary() {
+  const banner = document.getElementById('libBanner');
+  const sources = [
+    './imsc.all.min.js',
+    'https://unpkg.com/imsc@1.1.5/dist/imsc.all.min.js',
+    'https://cdn.jsdelivr.net/npm/imsc@1.1.5/dist/imsc.all.min.js'
+  ];
+
+  function showBanner(msg, kind) {
+    banner.style.display = 'block';
+    banner.textContent = msg;
+    banner.style.background = kind === 'error' ? '#3a1f1f' : '#1f2e1f';
+    banner.style.border = '1px solid ' + (kind === 'error' ? '#5a2f2f' : '#2f4f2f');
+    banner.style.color = kind === 'error' ? '#ff9a9a' : '#9ad7a8';
+  }
+
+  function tryLoad(index) {
+    if (index >= sources.length) {
+      showBanner(
+        'Could not load the imscJS rendering library from a local copy or either CDN (unpkg.com / jsdelivr.net). ' +
+        'For offline/air-gapped use, copy imsc.all.min.js and place it in ' +
+        'the same folder as this HTML file. Otherwise this page needs internet access on first load — an ' +
+        'ad-blocker or privacy extension may be blocking unpkg.com/jsdelivr.net, or Safari may be restricting ' +
+        'network requests from local file:// pages (try Chrome or Firefox instead).',
+        'error'
+      );
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = sources[index];
+    s.onload = function () {
+      if (typeof window.imsc === 'undefined') {
+        // Loaded but didn't expose the expected global — try next source.
+        tryLoad(index + 1);
+        return;
+      }
+      banner.style.display = 'none';
+    };
+    s.onerror = function () {
+      tryLoad(index + 1);
+    };
+    document.head.appendChild(s);
+  }
+
+  showBanner('Loading subtitle rendering library…', 'ok');
+  tryLoad(0);
+})();
+
+(function () {
+  const videoInput = document.getElementById('videoInput');
+  const subInput = document.getElementById('subInput');
+  const videoStatus = document.getElementById('videoStatus');
+  const subStatus = document.getElementById('subStatus');
+  const offsetInput = document.getElementById('offsetInput');
+  const offsetFlip = document.getElementById('offsetFlip');
+  const offsetStatus = document.getElementById('offsetStatus');
+  const stage = document.getElementById('stage');
+  const placeholder = document.getElementById('placeholder');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarEmpty = document.getElementById('sidebarEmpty');
+  const filterEmptyMsg = document.getElementById('filterEmptyMsg');
+  const filterBarEl = document.getElementById('filterBar');
+  const cueListContainer = document.getElementById('cueListContainer');
+  const qcFrameRateInput = document.getElementById('qcFrameRateInput');
+  const qcFrameRateStatus = document.getElementById('qcFrameRateStatus');
+  const searchInput = document.getElementById('searchInput');
+  const searchCaseToggle = document.getElementById('searchCaseToggle');
+  const searchClear = document.getElementById('searchClear');
+  const searchStatus = document.getElementById('searchStatus');
+  const translateBtn = document.getElementById('translateBtn');
+
+  const FRAME_STEP = 1 / 30; // approximate — see hint text
+  const JUMP_STEP = 5;
+  const LINE_COUNT_THRESHOLD = 3;      // 3+ lines flagged
+  const CHAR_LIMIT = 42;               // per line, excluding ruby annotation text
+  const SHORT_DURATION_SECONDS = 0.5;  // flag anything on screen for less than this
+  const SHORT_DURATION_CRITICAL_CHARS = 14; // ...and escalate if its longest line is at least this long
+  const MAX_DURATION_SECONDS = 7;      // flag anything on screen longer than this
+  // Control, zero-width, directional-override, BOM, and replacement characters —
+  // none of these ever belong in on-screen caption text. \u000A (the line break
+  // we deliberately insert between <br/>-split lines) is the one exception.
+  const SUSPICIOUS_CHAR_RE = /[\u0000-\u0009\u000B-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF\uFFFD]/;
+  let searchQuery = '';
+  let searchCaseSensitive = false;
+
+  let qcFrameRate = Number(qcFrameRateInput.value) || 23.976;
+  // Nominal frame rate (e.g. 24) and true/effective frame rate (e.g. 23.976) read
+  // straight off the loaded file's ttp:frameRate / ttp:frameRateMultiplier
+  // attributes. Used only to render sidebar timecodes as NDF frame-accurate
+  // timecode (matching Annotation Edit / the filename convention) — never used
+  // for offset or sync math, which stays in real seconds throughout.
+  let docFrameRate = 24;
+  let docEffectiveFrameRate = 24 * 1000 / 1001;
+  let currentFilter = 'all';
+  const FILTERS = [
+    { key: 'all',      label: 'All',       cls: null,       test: () => true },
+    { key: 'overlap',  label: 'Overlaps',  cls: 'overlap',  test: c => !!c.overlap },
+    { key: 'lines',    label: '3+ Lines',  cls: 'lines',    test: c => c.lineCount >= LINE_COUNT_THRESHOLD },
+    { key: 'chars',    label: '>42 Chars', cls: 'chars',    test: c => !!c.charLimitExceeded },
+    { key: 'duration', label: 'Duration',  cls: 'duration', test: c => !!(c.tooShort || c.tooLong) },
+    { key: 'durationCritical', label: `Critical (<${SHORT_DURATION_SECONDS}s, ${SHORT_DURATION_CRITICAL_CHARS}+ chars)`, cls: 'duration-critical', test: c => !!c.tooShortCritical },
+    { key: 'suspicious', label: 'Odd Chars', cls: 'suspicious', test: c => !!c.hasSuspiciousChars },
+  ];
+
+  let video = null;
+  let overlay = null;
+  let ttmlDoc = null;      // parsed imscJS document
+  let timeEvents = [];     // sorted array of ISD change offsets (seconds)
+  let cueList = [];        // [{ begin, end, region, text, overlap }] sorted by begin
+  // Cue-index -> { lang, confidence, text } | { unavailable: true }. Cleared on new file load,
+  // repopulated onto rows whenever renderSidebarList() rebuilds the DOM (e.g. on search).
+  const translationCache = new Map();
+  let lastRenderedIndex = -2;
+  let activeCueIndices = new Set();
+  let rafId = null;
+  let offsetSeconds = parseOffset(offsetInput.value) || 0;
+  function effectiveOffset() { return offsetSeconds; }
+
+  // Parses "h:mm:ss:ff" (frame-accurate burn-in timecode, optional leading -/+) into signed
+  // real-elapsed seconds, using the loaded subtitle file's own declared frame rate. This is the
+  // ONLY accepted format — anything else is rejected (returns null) so a malformed or
+  // wrong-format entry surfaces as an explicit error instead of a silent bad sync.
+  function parseOffset(str) {
+    if (!str) return 0;
+    str = str.trim();
+    if (str === '') return 0;
+    let sign = 1;
+    if (str[0] === '-') { sign = -1; str = str.slice(1); }
+    else if (str[0] === '+') { str = str.slice(1); }
+    const parts = str.split(':').map(p => p.trim());
+    if (parts.length !== 4) return null;
+    if (parts.some(p => p === '' || isNaN(Number(p)))) return null;
+    // Frame-accurate burn-in timecode (h:mm:ss:ff). Converted using the loaded
+    // file's own declared frame rate — the same NOMINAL-rate-as-base,
+    // effective-rate-for-drift math used for the sidebar timecodes, just run
+    // in reverse: timecode -> frame count -> real seconds. If no subtitle
+    // file has been loaded yet, this falls back to a 24fps/23.976fps guess
+    // (docFrameRate/docEffectiveFrameRate's defaults) — the caller checks
+    // ttmlDoc to warn when that fallback is actually in effect.
+    const [h, m, s, f] = parts.map(Number);
+    if (!Number.isInteger(f) || f < 0) return null;
+    const nominal = docFrameRate || 24;
+    const effective = docEffectiveFrameRate || nominal;
+    const frameCount = ((h * 3600 + m * 60 + s) * nominal) + f;
+    const seconds = frameCount / effective;
+    return sign * seconds;
+  }
+
+  function formatOffset(totalSeconds) {
+    const sign = totalSeconds < 0 ? '-' : '';
+    let s = Math.abs(Math.round(totalSeconds * 10) / 10);
+    const h = Math.floor(s / 3600); s -= h * 3600;
+    const m = Math.floor(s / 60); s -= m * 60;
+    const pad = n => String(n).padStart(2, '0');
+    return h > 0
+      ? `${sign}${h}:${pad(m)}:${pad(Number.isInteger(s) ? s : s.toFixed(1))}`
+      : `${sign}${m}:${pad(Number.isInteger(s) ? s : s.toFixed(1))}`;
+  }
+
+  function setStatus(el, msg, kind) {
+    el.textContent = msg || '';
+    el.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  function ensureVideoElement() {
+    if (video) return;
+    placeholder.remove();
+    video = document.createElement('video');
+    video.controls = true;
+    video.id = 'mainVideo';
+    overlay = document.createElement('div');
+    overlay.id = 'subtitleOverlay';
+    stage.appendChild(video);
+    stage.appendChild(overlay);
+    video.addEventListener('loadedmetadata', syncOverlaySize);
+    window.addEventListener('resize', syncOverlaySize);
+    video.addEventListener('play', startLoop);
+    video.addEventListener('pause', stopLoop);
+    video.addEventListener('seeked', forceRender);
+    video.addEventListener('ended', stopLoop);
+  }
+
+  function syncOverlaySize() {
+    if (!video || !overlay) return;
+    // Overlay exactly matches the rendered video box (letterboxing-aware).
+    const rect = video.getBoundingClientRect();
+    overlay.style.width = video.clientWidth + 'px';
+    overlay.style.height = video.clientHeight + 'px';
+    forceRender();
+  }
+
+  function startLoop() {
+    stopLoop();
+    const tick = () => {
+      renderAtCurrentTime();
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stopLoop() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+
+  function forceRender() {
+    lastRenderedIndex = -2;
+    renderAtCurrentTime();
+  }
+
+  // Binary search: index of the last element of arr (ascending) that is <= t
+  function findLastIndexLE(arr, t) {
+    let lo = 0, hi = arr.length - 1, ans = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if (arr[mid] <= t) { ans = mid; lo = mid + 1; }
+      else hi = mid - 1;
+    }
+    return ans;
+  }
+
+  function renderAtCurrentTime() {
+    if (!ttmlDoc || !video || !overlay) return;
+    // Positive offsetSeconds = show subtitles that many seconds EARLIER than their
+    // file timestamps. To find the right cue, look further ahead in the subtitle
+    // file's own timeline than the video's current position.
+    const t = video.currentTime + effectiveOffset();
+    const idx = findLastIndexLE(timeEvents, t);
+    if (idx !== lastRenderedIndex) {
+      lastRenderedIndex = idx;
+      overlay.innerHTML = '';
+      if (idx >= 0) {
+        try {
+          const isd = imsc.generateISD(ttmlDoc, timeEvents[idx]);
+          imsc.renderHTML(
+            isd,
+            overlay,
+            null,                 // image resolver (not needed for text profile)
+            overlay.clientHeight,
+            overlay.clientWidth,
+            false,                // displayForcedOnlyMode
+            null,                 // errorHandler
+            null,                 // previousISDState
+            false                 // enableRollUp
+          );
+        } catch (e) {
+          console.error('imscJS render error', e);
+        }
+      }
+    }
+    updateActiveSidebarRow(t);
+  }
+
+  // Reads the xml:lang attribute straight off the root <tt> element and returns
+  // it formatted exactly as it appears in the source, e.g. xml:lang="ja".
+  function getXmlLangTag(xmlStr) {
+    try {
+      const xmlDoc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+      if (xmlDoc.querySelector('parsererror')) return null;
+      const root = xmlDoc.documentElement;
+      if (!root || root.localName !== 'tt') return null;
+      const lang = root.getAttribute('xml:lang');
+      return lang !== null ? `xml:lang="${lang}"` : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function formatRateLabel(rate) {
+    if (!isFinite(rate) || rate <= 0) return String(rate);
+    return rate.toFixed(3).replace(/\.?0+$/, '');
+  }
+
+  function getAttrByLocalName(el, name) {
+    for (let i = 0; i < el.attributes.length; i++) {
+      if (el.attributes[i].localName === name) return el.attributes[i].value;
+    }
+    return null;
+  }
+
+  function parseTimeExpr(str, frameRate, tickRate) {
+    if (!str) return null;
+    str = str.trim();
+    let m = str.match(/^(\d+):(\d{2}):(\d{2}(?:\.\d+)?)$/);
+    if (m) return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+    m = str.match(/^(\d+):(\d{2}):(\d{2}):(\d{2,})(?:\.(\d+))?$/);
+    if (m) {
+      const frames = Number(m[4]) + (m[5] ? Number('0.' + m[5]) : 0);
+      return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) + frames / frameRate;
+    }
+    m = str.match(/^(\d+(?:\.\d+)?)(h|m|s|ms|f|t)$/);
+    if (m) {
+      const v = Number(m[1]);
+      switch (m[2]) {
+        case 'h': return v * 3600;
+        case 'm': return v * 60;
+        case 's': return v;
+        case 'ms': return v / 1000;
+        case 'f': return v / frameRate;
+        case 't': return v / tickRate;
+      }
+    }
+    return null;
+  }
+
+  // Parses the raw TTML/IMSC XML directly, independent of imscJS, to recover each
+  // <p>'s own begin/end/region. Returns null (rather than throwing) if the document
+  // doesn't look like something this simplified parser can safely handle.
+  function parseRawCueList(xmlStr) {
+    const xmlDoc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+    if (xmlDoc.querySelector('parsererror')) return null;
+
+    let root = xmlDoc.documentElement;
+    if (!root || root.localName !== 'tt') return null;
+
+    const frameRate = Number(getAttrByLocalName(root, 'frameRate')) || 30;
+    const frameRateMultiplier = getAttrByLocalName(root, 'frameRateMultiplier');
+    const effectiveFrameRate = frameRateMultiplier
+      ? frameRate * frameRateMultiplier.split(' ').reduce((a, b, i) => i === 0 ? Number(b) : a / Number(b), 1)
+      : frameRate;
+    const tickRate = Number(getAttrByLocalName(root, 'tickRate')) || effectiveFrameRate || 1;
+    // Record the document's declared rates for sidebar timecode display (NDF
+    // conversion). Sync/offset math is untouched — it never reads these.
+    docFrameRate = frameRate;
+    docEffectiveFrameRate = effectiveFrameRate;
+
+    function findDescendant(el, localName) {
+      for (const child of el.children) {
+        if (child.localName === localName) return child;
+        const found = findDescendant(child, localName);
+        if (found) return found;
+      }
+      return null;
+    }
+
+    const body = findDescendant(root, 'body');
+    if (!body) return null;
+
+    const styleEls = [];
+    (function collectStyles(el) {
+      for (const child of el.children) {
+        if (child.localName === 'style') styleEls.push(child);
+        collectStyles(child);
+      }
+    })(root);
+    const styleDefs = new Map();
+    styleEls.forEach(s => {
+      const id = getAttrByLocalName(s, 'id');
+      if (id) styleDefs.set(id, s);
+    });
+
+    function resolveStyleAttrForId(id, localName, visited) {
+      if (visited.has(id)) return null;
+      visited.add(id);
+      const el = styleDefs.get(id);
+      if (!el) return null;
+      const direct = getAttrByLocalName(el, localName);
+      if (direct !== null) return direct;
+      const chained = getAttrByLocalName(el, 'style');
+      if (chained) {
+        for (const cid of chained.trim().split(/\s+/)) {
+          const v = resolveStyleAttrForId(cid, localName, visited);
+          if (v !== null) return v;
+        }
+      }
+      return null;
+    }
+    function resolveStyleAttr(styleIdsStr, localName) {
+      if (!styleIdsStr) return null;
+      for (const id of styleIdsStr.trim().split(/\s+/)) {
+        const v = resolveStyleAttrForId(id, localName, new Set());
+        if (v !== null) return v;
+      }
+      return null;
+    }
+    function getRubyRole(el) {
+      const direct = getAttrByLocalName(el, 'ruby');
+      if (direct) return direct;
+      return resolveStyleAttr(getAttrByLocalName(el, 'style'), 'ruby');
+    }
+
+    // Walks a <p>'s content, splitting on <br/> into lines and tagging each
+    // text run as ruby-annotation ("text" role) or not, so the char-limit
+    // check can exclude furigana readings while a line-break count still
+    // reflects everything actually shown.
+    function extractPLines(pEl) {
+      const lines = [[]];
+      function visit(node, inheritedRole) {
+        if (node.nodeType === 3) { // text node
+          if (node.nodeValue) lines[lines.length - 1].push({ text: node.nodeValue, ruby: inheritedRole === 'text' });
+          return;
+        }
+        if (node.nodeType !== 1) return; // skip comments etc.
+        if (node.localName === 'br') { lines.push([]); return; }
+        const role = getRubyRole(node) || inheritedRole;
+        for (const child of node.childNodes) visit(child, role);
+      }
+      for (const child of pEl.childNodes) visit(child, null);
+      return lines;
+    }
+
+    const results = [];
+
+    function walk(el, inheritedBegin, inheritedEnd, inheritedRegion) {
+      let begin = inheritedBegin;
+      const beginAttr = getAttrByLocalName(el, 'begin');
+      if (beginAttr) {
+        const parsed = parseTimeExpr(beginAttr, effectiveFrameRate, tickRate);
+        if (parsed !== null) begin = inheritedBegin + parsed;
+      }
+
+      let end = inheritedEnd;
+      const endAttr = getAttrByLocalName(el, 'end');
+      const durAttr = getAttrByLocalName(el, 'dur');
+      if (endAttr) {
+        const parsed = parseTimeExpr(endAttr, effectiveFrameRate, tickRate);
+        if (parsed !== null) end = inheritedBegin + parsed;
+      } else if (durAttr) {
+        const parsed = parseTimeExpr(durAttr, effectiveFrameRate, tickRate);
+        if (parsed !== null) end = begin + parsed;
+      }
+
+      const regionAttr = getAttrByLocalName(el, 'region');
+      const region = regionAttr || inheritedRegion;
+
+      if (el.localName === 'p') {
+        const lines = extractPLines(el);
+        const lineTexts = lines.map(line => line.map(seg => seg.ruby ? `(${seg.text})` : seg.text).join(''));
+        const displayText = lineTexts.join('\n').trim();
+        if (!displayText) return;
+        const perLineLen = lines.map(line =>
+          Array.from(line.filter(seg => !seg.ruby).map(seg => seg.text).join('')).length
+        );
+        results.push({
+          begin, end,
+          region: region || '(default)',
+          text: displayText,
+          lineCount: lines.length,
+          maxLineLength: perLineLen.length ? Math.max(...perLineLen) : 0,
+          charLimitExceeded: perLineLen.some(len => len > CHAR_LIMIT),
+        });
+        return;
+      }
+      for (const child of el.children) walk(child, begin, end, region);
+    }
+
+    walk(body, 0, Infinity, '(default)');
+    if (results.length === 0) return null;
+
+    results.sort((a, b) => a.begin - b.begin);
+
+    // Overlap detection: flag any two cues whose time ranges genuinely overlap,
+    // regardless of region. Same-region overlaps are near-certain timing errors;
+    // cross-region overlaps (e.g. dialogue + a separate on-screen-text region)
+    // are often intentional, but still get flagged here so a tester can verify
+    // placement doesn't collide on screen — worth a look either way, especially
+    // for Japanese vertical/ruby layouts where two simultaneous blocks are more
+    // likely to visually clash than two simple horizontal lines would.
+    {
+      let runningEnd = -Infinity;
+      let runningEndOwner = null;
+      results.forEach(c => {
+        if (c.begin < runningEnd - 0.001) {
+          c.overlap = true;
+          if (runningEndOwner) runningEndOwner.overlap = true;
+        }
+        if (c.end > runningEnd) { runningEnd = c.end; runningEndOwner = c; }
+      });
+    }
+
+    const regionCount = new Set(results.map(c => c.region)).size;
+    results.forEach(c => { c.showRegionTag = regionCount > 1; });
+
+    return results;
+  }
+
+  // Fallback: derive cues from imscJS's own composited ISD boundaries (no overlap
+  // detection possible here — see comment above).
+  function extractISDText(node) {
+    if (!node) return '';
+    if (typeof node.text === 'string') return node.text;
+    if (Array.isArray(node.contents)) {
+      return node.contents.map(extractISDText).join(node.kind === 'p' ? '\n' : '');
+    }
+    return '';
+  }
+
+  function getISDText(isd) {
+    if (!isd || !Array.isArray(isd.contents)) return '';
+    return isd.contents.map(extractISDText).join('\n').replace(/\n{2,}/g, '\n').trim();
+  }
+
+  // Best-effort approximation for the fallback path — no ruby-role info survives
+  // ISD compositing (see comment on parseRawCueList above), so this may over-count
+  // characters on lines containing ruby text. Used only when the raw XML parse fails.
+  function computeApproxTextFlags(text) {
+    const lines = text.split('\n');
+    const lens = lines.map(l => Array.from(l).length);
+    return {
+      lineCount: lines.length,
+      maxLineLength: lens.length ? Math.max(...lens) : 0,
+      charLimitExceeded: lens.some(l => l > CHAR_LIMIT),
+    };
+  }
+
+  // Duration is real elapsed seconds already, so this check doesn't depend on frame
+  // rate at all — the QC Frame Rate box below is kept purely as a confirmation
+  // display (does the file's declared rate match what you know the video's actual
+  // rate to be), not as an input to this math.
+  function finalizeDurationFlags(list) {
+    list.forEach(c => {
+      const dur = isFinite(c.end) ? c.end - c.begin : null;
+      c.duration = dur;
+      c.tooShort = dur !== null && dur < SHORT_DURATION_SECONDS - 1e-6;
+      c.tooShortCritical = c.tooShort && c.maxLineLength >= SHORT_DURATION_CRITICAL_CHARS;
+      c.tooLong = dur !== null && dur > MAX_DURATION_SECONDS + 1e-6;
+    });
+  }
+
+  function finalizeCharFlags(list) {
+    list.forEach(c => { c.hasSuspiciousChars = SUSPICIOUS_CHAR_RE.test(c.text); });
+  }
+
+  function describeSuspiciousChar(ch) {
+    const cp = ch.codePointAt(0);
+    return 'U+' + cp.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  function cueMatchesSearch(cue) {
+    if (!searchQuery) return true;
+    const hay = searchCaseSensitive ? cue.text : cue.text.toLowerCase();
+    const needle = searchCaseSensitive ? searchQuery : searchQuery.toLowerCase();
+    return hay.includes(needle);
+  }
+
+  // Builds the cue-text DOM instead of a plain textContent assignment, so we can
+  // wrap two independent things inline: (1) any non-printable/zero-width/BOM/etc.
+  // character as a clickable, copyable tag showing its codepoint, always on —
+  // not just while searching — and (2) the current search match, if any. A
+  // character can be both at once (search hit lands on a suspicious char).
+  function renderCueText(container, text, query, caseSensitive) {
+    container.textContent = '';
+    const searchRanges = [];
+    if (query) {
+      const hay = caseSensitive ? text : text.toLowerCase();
+      const needle = caseSensitive ? query : query.toLowerCase();
+      let idx = 0;
+      while ((idx = hay.indexOf(needle, idx)) !== -1) {
+        searchRanges.push([idx, idx + needle.length]);
+        idx += needle.length;
+      }
+    }
+    const inSearchRange = i => searchRanges.some(([s, e]) => i >= s && i < e);
+
+    let buffer = '';
+    const flushBuffer = () => {
+      if (buffer) { container.appendChild(document.createTextNode(buffer)); buffer = ''; }
+    };
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (SUSPICIOUS_CHAR_RE.test(ch)) {
+        flushBuffer();
+        const tag = document.createElement('span');
+        tag.className = 'suspicious-char' + (inSearchRange(i) ? ' search-hit' : '');
+        tag.textContent = describeSuspiciousChar(ch);
+        tag.title = `Non-printable character ${describeSuspiciousChar(ch)} — click to copy`;
+        tag.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(ch)
+              .then(() => setStatus(searchStatus, `Copied ${describeSuspiciousChar(ch)} — paste it into search to find more.`, 'ok'))
+              .catch(() => setStatus(searchStatus, 'Could not copy — your browser may be blocking clipboard access.', 'err'));
+          } else {
+            setStatus(searchStatus, 'Clipboard access is not available in this browser/context.', 'err');
+          }
+        });
+        container.appendChild(tag);
+      } else if (inSearchRange(i)) {
+        flushBuffer();
+        const mark = document.createElement('mark');
+        mark.className = 'search-hit-text';
+        mark.textContent = ch;
+        container.appendChild(mark);
+      } else {
+        buffer += ch;
+      }
+    }
+    flushBuffer();
+  }
+
+  function buildCueListFromISD() {
+    const list = [];
+    let lastText = null;
+    let openCue = null;
+    timeEvents.forEach(t => {
+      let text = '';
+      try {
+        const isd = imsc.generateISD(ttmlDoc, t);
+        text = getISDText(isd);
+      } catch (e) {
+        return;
+      }
+      if (openCue) openCue.end = t;
+      if (text && text !== lastText) {
+        openCue = Object.assign(
+          { begin: t, end: Infinity, region: '(default)', text, showRegionTag: false },
+          computeApproxTextFlags(text)
+        );
+        list.push(openCue);
+        lastText = text;
+      } else if (!text) {
+        lastText = null;
+        openCue = null;
+      } else {
+        openCue = list[list.length - 1];
+      }
+    });
+    return list;
+  }
+
+  // Converts a real-elapsed-seconds value (as parsed straight from the file's
+  // clock-time attributes) into frame-accurate NDF timecode.
+  function formatTimestamp(t) {
+    if (!isFinite(t)) return '';
+    const nominal = docFrameRate || 24;
+    const effective = docEffectiveFrameRate || nominal;
+    const frameCount = Math.round(Math.max(0, t) * effective);
+    const F = frameCount % nominal;
+    const totalSec = Math.floor(frameCount / nominal);
+    const S = totalSec % 60;
+    const totalMin = Math.floor(totalSec / 60);
+    const M = totalMin % 60;
+    const H = Math.floor(totalMin / 60);
+    const pad2 = n => String(n).padStart(2, '0');
+    return `${pad2(H)}:${pad2(M)}:${pad2(S)}:${pad2(F)}`;
+  }
+
+  function formatRange(begin, end) {
+    const b = formatTimestamp(begin);
+    return isFinite(end) ? `${b}-${formatTimestamp(end)}` : `${b}-…`;
+  }
+
+  function buildCueList(xmlStr) {
+    cueList = [];
+    translationCache.clear();
+    if (!ttmlDoc) { renderSidebarList(); return; }
+
+    let raw = null;
+    try {
+      raw = parseRawCueList(xmlStr);
+    } catch (e) {
+      console.warn('Raw timing parse failed, falling back to composited view:', e);
+      raw = null;
+    }
+
+    if (raw) {
+      cueList = raw;
+      setStatus(subStatus, subStatus.textContent + ' — per-line timing & overlap check active.', 'ok');
+    } else {
+      cueList = buildCueListFromISD();
+      setStatus(subStatus, subStatus.textContent + ' — showing composited view (overlap detection unavailable for this file).', 'ok');
+    }
+    finalizeDurationFlags(cueList);
+    finalizeCharFlags(cueList);
+
+    activeCueIndices = new Set();
+    renderSidebarList();
+  }
+
+  function renderFilterBar() {
+    filterBarEl.innerHTML = '';
+    FILTERS.forEach(f => {
+      const count = f.key === 'all'
+        ? cueList.filter(cueMatchesSearch).length
+        : cueList.filter(c => f.test(c) && cueMatchesSearch(c)).length;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'filter-chip' + (f.key === currentFilter ? ' active' : '') + (f.cls ? ' ' + f.cls : '');
+      btn.textContent = `${f.label} (${count})`;
+      btn.addEventListener('click', () => {
+        currentFilter = f.key;
+        renderFilterBar();
+        applyFilterVisibility();
+      });
+      filterBarEl.appendChild(btn);
+    });
+  }
+
+  function applyFilterVisibility() {
+    const filterDef = FILTERS.find(f => f.key === currentFilter) || FILTERS[0];
+    let visibleCount = 0;
+    cueList.forEach((cue, i) => {
+      const el = cueListContainer.children[i];
+      if (!el) return;
+      const show = filterDef.test(cue) && cueMatchesSearch(cue);
+      el.style.display = show ? '' : 'none';
+      if (show) visibleCount++;
+    });
+    filterEmptyMsg.textContent = searchQuery ? 'No cues match this filter and search.' : 'No cues match this filter.';
+    filterEmptyMsg.style.display = (visibleCount === 0 && cueList.length > 0) ? 'block' : 'none';
+  }
+
+  function renderSidebarList() {
+    cueListContainer.innerHTML = '';
+    renderFilterBar();
+
+    if (cueList.length === 0) {
+      sidebarEmpty.style.display = 'block';
+      filterEmptyMsg.style.display = 'none';
+      return;
+    }
+    sidebarEmpty.style.display = 'none';
+
+    const flagMeta = {
+      overlap:  { cls: 'flag-overlap',  tag: 'O', title: 'Overlaps another cue' },
+      lines:    { cls: 'flag-lines',    tag: 'L', title: `${LINE_COUNT_THRESHOLD}+ lines` },
+      chars:    { cls: 'flag-chars',    tag: 'C', title: `Exceeds ${CHAR_LIMIT} chars on a line` },
+      duration: { cls: 'flag-duration', tag: 'D', title: 'Duration out of range' },
+      durationCritical: { cls: 'flag-duration-critical', tag: '!', title: 'Immediate attention: very short duration with a long line' },
+      suspicious: { cls: 'flag-suspicious', tag: '#', title: 'Contains a non-printable/zero-width character' },
+    };
+
+    const frag = document.createDocumentFragment();
+    cueList.forEach((cue, i) => {
+      const row = document.createElement('div');
+      row.className = 'cue-item' + (cue.overlap ? ' overlap' : '');
+      row.dataset.index = String(i);
+
+      const timeEl = document.createElement('span');
+      timeEl.className = 'cue-time';
+      timeEl.textContent = formatRange(cue.begin, cue.end);
+
+      if (cue.showRegionTag) {
+        const tag = document.createElement('span');
+        tag.className = 'cue-region-tag';
+        tag.textContent = cue.region;
+        timeEl.appendChild(tag);
+      }
+
+      const activeFlags = [];
+      if (cue.overlap) activeFlags.push('overlap');
+      if (cue.lineCount >= LINE_COUNT_THRESHOLD) activeFlags.push('lines');
+      if (cue.charLimitExceeded) activeFlags.push('chars');
+      if (cue.tooShortCritical) activeFlags.push('durationCritical');
+      else if (cue.tooShort || cue.tooLong) activeFlags.push('duration');
+      if (cue.hasSuspiciousChars) activeFlags.push('suspicious');
+      activeFlags.forEach(key => {
+        const meta = flagMeta[key];
+        const tag = document.createElement('span');
+        tag.className = 'flag-tag ' + meta.cls;
+        tag.textContent = meta.tag;
+        tag.title = key === 'durationCritical'
+          ? `Under ${SHORT_DURATION_SECONDS}s with a ${cue.maxLineLength}-char line (${cue.duration.toFixed(3)}s) — immediate attention`
+          : key === 'duration'
+          ? (cue.tooShort ? `Under ${SHORT_DURATION_SECONDS}s (${cue.duration.toFixed(3)}s)` : `Over ${MAX_DURATION_SECONDS}s (${cue.duration.toFixed(3)}s)`)
+          : meta.title;
+        timeEl.appendChild(tag);
+      });
+
+      const textEl = document.createElement('span');
+      textEl.className = 'cue-text';
+      renderCueText(textEl, cue.text, searchQuery, searchCaseSensitive);
+
+      row.appendChild(timeEl);
+      row.appendChild(textEl);
+
+      const translationEl = document.createElement('span');
+      translationEl.className = 'cue-translation';
+      translationEl.style.display = 'none';
+      row.appendChild(translationEl);
+      if (translationCache.has(i)) applyTranslationToRow(translationEl, translationCache.get(i));
+
+      row.addEventListener('click', () => {
+        if (!video) return;
+        video.currentTime = Math.max(0, cue.begin - effectiveOffset());
+        forceRender();
+      });
+      frag.appendChild(row);
+    });
+    cueListContainer.appendChild(frag);
+    applyFilterVisibility();
+  }
+
+  // Fills a cue's .cue-translation slot from a cached result ({ lang, confidence, text }
+  // or { unavailable: true }) and makes it visible.
+  function applyTranslationToRow(translationEl, entry) {
+    translationEl.style.display = '';
+    if (entry.unavailable) {
+      translationEl.className = 'cue-translation unavailable';
+      translationEl.textContent = entry.message || 'Translation unavailable for this cue.';
+      return;
+    }
+    translationEl.className = 'cue-translation';
+    translationEl.innerHTML = '';
+    const tag = document.createElement('span');
+    tag.className = 'translate-lang-tag';
+    tag.textContent = entry.lang === 'en' ? 'EN' : `${entry.lang} → EN`;
+    tag.title = `Detected ${entry.lang}${entry.confidence != null ? ` (${Math.round(entry.confidence * 100)}% confidence)` : ''}`;
+    translationEl.appendChild(tag);
+    translationEl.appendChild(document.createTextNode(entry.text));
+  }
+
+  function updateActiveSidebarRow(lookupTime) {
+    if (cueList.length === 0) return;
+    const next = new Set();
+    cueList.forEach((c, i) => {
+      if (lookupTime >= c.begin && lookupTime < c.end) next.add(i);
+    });
+
+    let changed = next.size !== activeCueIndices.size;
+    if (!changed) {
+      for (const i of next) { if (!activeCueIndices.has(i)) { changed = true; break; } }
+    }
+    if (!changed) return;
+
+    activeCueIndices.forEach(i => {
+      const el = cueListContainer.children[i];
+      if (el) el.classList.remove('active');
+    });
+    activeCueIndices = next;
+    let firstEl = null;
+    activeCueIndices.forEach(i => {
+      const el = cueListContainer.children[i];
+      if (el) {
+        el.classList.add('active');
+        if (!firstEl) firstEl = el;
+      }
+    });
+    if (firstEl) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  offsetInput.addEventListener('change', () => {
+    const parsed = parseOffset(offsetInput.value);
+    if (parsed === null) {
+      setStatus(offsetStatus, 'Could not parse that — enter frame-accurate timecode as h:mm:ss:ff (e.g. 00:58:30:07, optionally with a leading − or +). No other format is accepted.', 'err');
+      return;
+    }
+    offsetSeconds = parsed;
+    const rateNote = ttmlDoc
+      ? ` (converted at ${formatRateLabel(docEffectiveFrameRate)} fps from the loaded file)`
+      : ' (no subtitle file loaded yet, so this used a 24/23.976fps default guess — reload the file and re-enter the timecode once it declares its own rate)';
+    setStatus(offsetStatus, `Offset ${formatOffset(offsetSeconds)}${rateNote}. If subtitles still look off, try the ± button.`, 'ok');
+    forceRender();
+  });
+
+  offsetFlip.addEventListener('click', () => {
+    offsetSeconds = -offsetSeconds;
+    const sign = offsetSeconds < 0 ? '-' : '';
+    offsetInput.value = sign + formatTimestamp(Math.abs(offsetSeconds));
+    setStatus(offsetStatus, `Flipped to ${formatOffset(offsetSeconds)}.`, 'ok');
+    forceRender();
+  });
+
+  function updateSearchStatus() {
+    if (!searchQuery) { setStatus(searchStatus, ''); return; }
+    const matches = cueList.filter(cueMatchesSearch).length;
+    setStatus(searchStatus, `${matches} cue${matches === 1 ? '' : 's'} match "${searchQuery}"${searchCaseSensitive ? ' (case-sensitive)' : ''}.`, matches ? 'ok' : 'err');
+  }
+
+  // Light debounce so a full sidebar re-render (needed to rebuild the inline
+  // highlight markup) doesn't fire on every single keystroke.
+  let searchDebounce = null;
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      searchQuery = searchInput.value;
+      renderSidebarList();
+      updateSearchStatus();
+    }, 150);
+  });
+
+  searchCaseToggle.addEventListener('click', () => {
+    searchCaseSensitive = !searchCaseSensitive;
+    searchCaseToggle.classList.toggle('active', searchCaseSensitive);
+    renderSidebarList();
+    updateSearchStatus();
+  });
+
+  searchClear.addEventListener('click', () => {
+    searchQuery = '';
+    searchInput.value = '';
+    renderSidebarList();
+    updateSearchStatus();
+  });
+
+  // ---- Translate visible cues (Chrome's on-device Translator / Language Detector) ----
+  const TRANSLATE_IDLE_LABEL = 'Translate';
+  let languageDetectorPromise = null;
+  function getLanguageDetector() {
+    if (!languageDetectorPromise) {
+      languageDetectorPromise = LanguageDetector.create({
+        monitor(m) {
+          m.addEventListener('downloadprogress', e => {
+            translateBtn.textContent = `Downloading language model… ${Math.round(e.loaded * 100)}%`;
+          });
+        },
+      });
+    }
+    return languageDetectorPromise;
+  }
+
+  const translatorPromises = new Map(); // detected source lang -> Promise<Translator|null>
+  function getTranslatorFor(sourceLang) {
+    if (!translatorPromises.has(sourceLang)) {
+      translatorPromises.set(sourceLang, (async () => {
+        const availability = await Translator.availability({ sourceLanguage: sourceLang, targetLanguage: 'en' });
+        if (availability === 'unavailable') return null;
+        return Translator.create({
+          sourceLanguage: sourceLang,
+          targetLanguage: 'en',
+          monitor(m) {
+            m.addEventListener('downloadprogress', e => {
+              translateBtn.textContent = `Downloading ${sourceLang}→en model… ${Math.round(e.loaded * 100)}%`;
+            });
+          },
+        });
+      })());
+    }
+    return translatorPromises.get(sourceLang);
+  }
+
+  // Rows currently scrolled into view within the sidebar (below the sticky header/search/filter
+  // group), that pass the active filter and search, and aren't already translated.
+  function getVisibleUntranslatedRows() {
+    const stickyEl = sidebar.querySelector('.sidebar-sticky');
+    const sidebarRect = sidebar.getBoundingClientRect();
+    const visibleTop = stickyEl ? stickyEl.getBoundingClientRect().bottom : sidebarRect.top;
+    const visibleBottom = sidebarRect.bottom;
+    const targets = [];
+    for (const row of cueListContainer.children) {
+      if (row.style.display === 'none') continue;
+      const idx = Number(row.dataset.index);
+      if (translationCache.has(idx)) continue;
+      const r = row.getBoundingClientRect();
+      if (r.bottom > visibleTop && r.top < visibleBottom) targets.push({ row, idx });
+    }
+    return targets;
+  }
+
+  if (!('Translator' in self) || !('LanguageDetector' in self)) {
+    translateBtn.disabled = true;
+    translateBtn.textContent = 'Translate (unsupported browser)';
+    translateBtn.title = "This browser doesn't support Chrome's built-in on-device Translator API — try Chrome 138+ on desktop.";
+  }
+
+  translateBtn.addEventListener('click', async () => {
+    if (cueList.length === 0) return;
+    const targets = getVisibleUntranslatedRows();
+    if (targets.length === 0) {
+      translateBtn.textContent = 'Nothing new to translate';
+      setTimeout(() => { translateBtn.textContent = TRANSLATE_IDLE_LABEL; }, 1400);
+      return;
+    }
+    translateBtn.disabled = true;
+    try {
+      const detector = await getLanguageDetector();
+      for (let n = 0; n < targets.length; n++) {
+        const { row, idx } = targets[n];
+        translateBtn.textContent = `Translating ${n + 1}/${targets.length}…`;
+        const translationEl = row.querySelector('.cue-translation');
+        const text = (cueList[idx].text || '').replace(/\s+/g, ' ').trim();
+        let entry;
+        if (!text) {
+          entry = { unavailable: true, message: 'Nothing to translate.' };
+        } else {
+          try {
+            const results = await detector.detect(text);
+            const best = results[0];
+            if (!best || !best.detectedLanguage || best.detectedLanguage === 'und') {
+              entry = { unavailable: true, message: "Couldn't detect a language for this cue." };
+            } else if (best.detectedLanguage === 'en') {
+              entry = { lang: 'en', confidence: best.confidence, text };
+            } else {
+              const translator = await getTranslatorFor(best.detectedLanguage);
+              if (!translator) {
+                entry = { unavailable: true, message: `No on-device model available for ${best.detectedLanguage} → English.` };
+              } else {
+                const translated = await translator.translate(text);
+                entry = { lang: best.detectedLanguage, confidence: best.confidence, text: translated };
+              }
+            }
+          } catch (err) {
+            console.warn('Translation failed for cue', idx, err);
+            entry = { unavailable: true, message: 'Translation failed for this cue.' };
+          }
+        }
+        translationCache.set(idx, entry);
+        applyTranslationToRow(translationEl, entry);
+      }
+    } finally {
+      translateBtn.disabled = false;
+      translateBtn.textContent = TRANSLATE_IDLE_LABEL;
+    }
+  });
+
+  qcFrameRateInput.addEventListener('change', () => {
+    const v = Number(qcFrameRateInput.value);
+    if (!v || v <= 0) {
+      setStatus(qcFrameRateStatus, 'Enter a positive number, e.g. 23.976.', 'err');
+      return;
+    }
+    qcFrameRate = v;
+    setStatus(qcFrameRateStatus, `Noted: ${v} fps. This is just a confirmation display now — it doesn't feed the duration check (that's a flat ${SHORT_DURATION_SECONDS}s, frame-rate-independent).`, 'ok');
+  });
+
+  videoInput.addEventListener('change', () => {
+    const file = videoInput.files[0];
+    if (!file) return;
+    ensureVideoElement();
+    const url = URL.createObjectURL(file);
+    video.src = url;
+    setStatus(videoStatus, `Loaded: ${file.name}`, 'ok');
+  });
+
+  subInput.addEventListener('change', () => {
+    const file = subInput.files[0];
+    if (!file) return;
+    setStatus(subStatus, 'Parsing…');
+    if (typeof window.imsc === 'undefined') {
+      setStatus(subStatus, 'Rendering library not loaded yet — check the banner above the controls.', 'err');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const xmlStr = reader.result;
+        ttmlDoc = imsc.fromXML(xmlStr, function (err) {
+          console.warn('imscJS parse warning:', err);
+        });
+        timeEvents = ttmlDoc.getMediaTimeEvents() || [];
+        lastRenderedIndex = -2;
+        buildCueList(xmlStr);
+        const langTag = getXmlLangTag(xmlStr);
+        // Auto-fill the QC frame rate from the file's own declared rate — it's
+        // already being read for the sidebar timecodes, so reuse it here
+        // instead of leaving the duration check on a hardcoded 23.976 default.
+        // Still user changeable afterward.
+        const rateLabel = formatRateLabel(docEffectiveFrameRate);
+        qcFrameRateInput.value = rateLabel;
+        qcFrameRate = docEffectiveFrameRate;
+        finalizeDurationFlags(cueList);
+        renderSidebarList();
+        setStatus(qcFrameRateStatus, `Detected from file: ${rateLabel} fps. Confirm this matches the video's actual frame rate.`, 'ok');
+        setStatus(subStatus, `Loaded: ${file.name}${langTag ? ` (${langTag})` : ''}`, 'ok');
+        if (video) { syncOverlaySize(); forceRender(); }
+      } catch (e) {
+        console.error(e);
+        ttmlDoc = null;
+        timeEvents = [];
+        cueList = [];
+        renderSidebarList();
+        setStatus(subStatus, 'Failed to parse: ' + e.message, 'err');
+      }
+    };
+    reader.onerror = () => setStatus(subStatus, 'Could not read file.', 'err');
+    reader.readAsText(file);
+  });
+
+  // --- Keyboard shortcuts -----------------------------------------------
+  // J: rewind, L: fast-forward, K/Space: play-pause (and resets speed to normal).
+  const FF_RATES = [2, 4, 8];
+  let speedIndex = -1;       // -1 = normal speed, no FF/rewind active
+  let rewindDirection = 0;   // 0 = not rewinding, -1 = rewinding
+  let rewindTimer = null;
+
+  function stopRewind() {
+    if (rewindTimer) { clearInterval(rewindTimer); rewindTimer = null; }
+    rewindDirection = 0;
+  }
+
+  function resetSpeed() {
+    stopRewind();
+    speedIndex = -1;
+    video.playbackRate = 1;
+  }
+
+  function startRewind() {
+    video.pause();
+    if (rewindDirection === -1) {
+      speedIndex = Math.min(speedIndex + 1, FF_RATES.length - 1);
+    } else {
+      stopRewind();
+      speedIndex = 0;
+    }
+    rewindDirection = -1;
+    const rate = FF_RATES[speedIndex];
+    const stepMs = 100;
+    rewindTimer = setInterval(() => {
+      video.currentTime = Math.max(0, video.currentTime - (rate * stepMs / 1000));
+      forceRender();
+      if (video.currentTime <= 0) stopRewind();
+    }, stepMs);
+  }
+
+  function startFastForward() {
+    stopRewind();
+    if (speedIndex >= 0 && video.playbackRate > 1) {
+      speedIndex = Math.min(speedIndex + 1, FF_RATES.length - 1);
+    } else {
+      speedIndex = 0;
+    }
+    video.playbackRate = FF_RATES[speedIndex];
+    if (video.paused) video.play();
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (!video) return;
+    const tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return; // don't hijack typing in the offset field
+
+    switch (e.key) {
+      case ' ':
+      case 'Spacebar':
+      case 'k':
+      case 'K':
+        e.preventDefault();
+        resetSpeed();
+        if (video.paused) video.play(); else video.pause();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        resetSpeed();
+        video.pause();
+        video.currentTime = Math.max(0, video.currentTime - (e.shiftKey ? JUMP_STEP : FRAME_STEP));
+        forceRender();
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        resetSpeed();
+        video.pause();
+        video.currentTime = Math.min(video.duration || Infinity, video.currentTime + (e.shiftKey ? JUMP_STEP : FRAME_STEP));
+        forceRender();
+        break;
+      case 'j':
+      case 'J':
+        e.preventDefault();
+        startRewind();
+        break;
+      case 'l':
+      case 'L':
+        e.preventDefault();
+        startFastForward();
+        break;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

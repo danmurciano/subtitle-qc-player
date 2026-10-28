@@ -1,0 +1,38 @@
+name: Build Mac app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Subtitle QC.app
+        run: BUILD_NUMBER=${{ github.run_number }} bash mac/build.sh
+
+      - name: Keep the build (Actions tab)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Subtitle-QC-build-${{ github.run_number }}
+          path: build/Subtitle-QC.zip
+
+      - name: Publish as the latest download (Releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/Subtitle-QC.zip \
+            --target "$GITHUB_SHA" \
+            --title "Subtitle QC — build ${{ github.run_number }}" \
+            --notes "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'), commit ${GITHUB_SHA::7}). Download Subtitle-QC.zip below."
