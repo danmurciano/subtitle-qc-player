@@ -33,12 +33,13 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
                 panel.directoryURL = FileManager.default.fileExists(atPath: start) ? u : u.deletingLastPathComponent()
             }
             let finish = { (r: NSApplication.ModalResponse) in
-                if r == .OK, let p = panel.url?.path { replyHandler(p, nil) } else { replyHandler(NSNull(), nil) }
+                if r == .OK, let p = panel.url?.path { Access.allowFolder(p); replyHandler(p, nil) } else { replyHandler(NSNull(), nil) }
             }
             if let win = view?.window { panel.beginSheetModal(for: win, completionHandler: finish) } else { finish(panel.runModal()) }
 
         case "listFolder":
             let path = str("path")
+            guard Access.isAllowed(path) else { replyHandler(nil, "Not allowed: choose this folder first."); return }
             DispatchQueue.global(qos: .userInitiated).async {
                 let url = URL(fileURLWithPath: path, isDirectory: true)
                 let items = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey], options: [.skipsHiddenFiles])
@@ -51,6 +52,7 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
 
         case "read":
             let path = str("path"), start = UInt64(max(0, num("start"))), end = UInt64(max(0, num("end")))
+            guard Access.isAllowed(path) else { replyHandler(nil, "Not allowed: “\(path)” isn't in a chosen folder."); return }
             DispatchQueue.global(qos: .userInitiated).async {
                 var result: String? = nil
                 if let h = FileHandle(forReadingAtPath: path) {
@@ -73,7 +75,9 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             view?.layoutPlayer(visible: visible, stage: stage, videoRect: vid)
             replyHandler(true, nil)
 
-        case "videoLoad": view?.video.load(path: str("path"), id: Int(num("id"))); replyHandler(true, nil)
+        case "videoLoad":
+            guard Access.isAllowed(str("path")) else { replyHandler(nil, "Not allowed"); return }
+            view?.video.load(path: str("path"), id: Int(num("id"))); replyHandler(true, nil)
         case "videoUnload": view?.video.unload(); replyHandler(true, nil)
         case "videoPlay": view?.video.play(rate: num("rate")); replyHandler(true, nil)
         case "videoPause": view?.video.pause(); replyHandler(true, nil)
@@ -83,6 +87,7 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
 
         case "waveStart":
             let id = Int(num("id"))
+            guard Access.isAllowed(str("path")) else { replyHandler(nil, "Not allowed"); return }
             var prefs: [Int: [Int]] = [:]
             if let p = body["prefs"] as? [String: Any] {
                 for (k, v) in p { if let n = Int(k), let arr = v as? [NSNumber] { prefs[n] = arr.map { $0.intValue } } }

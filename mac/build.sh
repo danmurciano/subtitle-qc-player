@@ -47,8 +47,9 @@ mkdir -p "$ICONSET"
 cp "$ROOT"/mac/icon/icon_*.png "$ICONSET/"
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
-# 4. Ad-hoc signature (required to run on Apple Silicon; not an Apple Developer ID)
-codesign --force --deep --sign - "$APP"
+# 4. Ad-hoc signature (required to run on Apple Silicon; not an Apple Developer ID), with the
+#    hardened runtime so no other software can inject code into the app.
+codesign --force --deep --options runtime --sign - "$APP"
 
 # 5. Zip for download
 (cd "$ROOT/build" && ditto -c -k --keepParent "Subtitle QC.app" "Subtitle-QC.zip")

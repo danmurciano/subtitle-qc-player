@@ -10,6 +10,7 @@ final class MainView: NSView {
     static let stageColor = NSColor(srgbRed: 0x07 / 255.0, green: 0x07 / 255.0, blue: 0x08 / 255.0, alpha: 1)   // stage grey
 
     let playerHost = NSView()
+    let navGuard = NavigationGuard()
     let video = VideoController()
     var webView: DropWebView!
     var bridge: Bridge!
@@ -38,19 +39,37 @@ final class MainView: NSView {
         webView = DropWebView(frame: bounds, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.setValue(false, forKey: "drawsBackground")
+        webView.navigationDelegate = navGuard
+        webView.uiDelegate = navGuard
         if #available(macOS 13.3, *) { webView.isInspectable = true }
-        webView.onDrop = { [weak self] items in self?.bridge.emit("drop", ["items": items]) }
+        webView.onDrop = { [weak self] items in
+            for it in items {   // dropping something on the window counts as choosing it
+                guard let p = it["path"] as? String else { continue }
+                if (it["isDir"] as? Bool) == true { Access.allowFolder(p) } else { Access.allowFile(p) }
+            }
+            self?.bridge.emit("drop", ["items": items])
+        }
         addSubview(webView)
         video.bridge = bridge
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    private var networkBlocked = false
     func load() {
         guard let url = Bundle.main.url(forResource: "index", withExtension: "html") else {
             Log.write("error", "index.html missing from the app bundle"); return
         }
-        webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+        let go = { [weak self] in self?.webView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent()) }
+        if networkBlocked { _ = go(); return }
+        // Safety net: the interface never needs the internet, so every web request is blocked.
+        let rules = #"[{"trigger":{"url-filter":"^(https?|wss?|ftp)://"},"action":{"type":"block"}}]"#
+        WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "no-network", encodedContentRuleList: rules) { [weak self] list, error in
+            guard let self = self else { return }
+            if let list = list { self.webView.configuration.userContentController.add(list); self.networkBlocked = true }
+            else { Log.write("error", "Network block rules failed: \(error?.localizedDescription ?? "?")") }
+            _ = go()
+        }
     }
     func reload() { video.unload(); playerHost.isHidden = true; load() }
 
