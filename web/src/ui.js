@@ -165,8 +165,61 @@ function assign() {
       const s = Match.score(v.info, r.nameInfo || Match.parse(r.name));
       if (s.score >= Match.MATCH_THRESHOLD && (!best || s.score > best.s.score)) best = { v, s };
     }
-    if (best) { r.video = best.v.name; r.matchReasons = best.s.reasons; r.matchScore = best.s.score; }
+    if (best) { r.video = best.v.name; r.matchReasons = best.s.reasons; r.matchScore = best.s.score; r.matchConflict = best.s.conflict || null; }
+    else r.matchConflict = null;
   }
+  nameChecks();
+}
+
+// ------------------------------------------------------------ season / episode in file names
+// Compares the season (and episode) in each subtitle file name with: its matched video, the chosen
+// folder's name, and the other subtitle files of the same show. Mismatches are shown under the
+// file name on the Conform page and count as errors / warnings.
+function seasonFromText(t) {
+  const m = String(t || '').match(/(?:^|[^a-z0-9])(?:season|s|yr)[\s_.-]*0*(\d{1,2})(?![0-9])/i);
+  return m ? +m[1] : null;
+}
+function nameChecks() {
+  const KIND = 'name';
+  for (const r of state.subs) { r.flags = (r.flags || []).filter(f => f.kind !== KIND); r.nameIssues = []; }
+  const add = (r, sev, text, detail) => { r.flags.push({ sev, text, detail, kind: KIND }); r.nameIssues.push({ sev, text }); };
+  const seasonOf = r => (r.nameInfo || {}).season;
+
+  // 1. against the matched video (same production code, different season / episode)
+  for (const r of state.subs) {
+    const c = r.matchConflict;
+    if (!c) continue;
+    if (c.season) add(r, 'error', `Season ${c.season[1]} in file name, but the video is Season ${c.season[0]}`, `Same production code as the video “${r.video}”.`);
+    if (c.episode) add(r, 'error', `Episode ${c.episode[1]} in file name, but the video is episode ${c.episode[0]}`, `Same production code as the video “${r.video}”.`);
+  }
+  // 2. against the chosen folder's name (e.g. "Season_02")
+  const folderSeason = seasonFromText(state.subFolder);
+  if (folderSeason != null) for (const r of state.subs) {
+    const s = seasonOf(r);
+    if (s != null && s !== folderSeason && !(r.matchConflict && r.matchConflict.season))
+      add(r, 'error', `Season ${s} in file name, but the folder is Season ${folderSeason}`, `Folder “${state.subFolder}”.`);
+  }
+  // 3. against the other files of the same show: flag the odd ones out when most agree
+  const byShow = new Map();
+  for (const r of state.subs) {
+    const s = seasonOf(r), show = ((r.nameInfo || {}).showWords || []).join('');
+    if (s == null || !show) continue;
+    if (!byShow.has(show)) byShow.set(show, []);
+    byShow.get(show).push(r);
+  }
+  for (const list of byShow.values()) {
+    if (list.length < 3) continue;
+    const counts = new Map();
+    for (const r of list) counts.set(seasonOf(r), (counts.get(seasonOf(r)) || 0) + 1);
+    if (counts.size < 2) continue;
+    const [major, n] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (n <= list.length / 2) continue;   // no clear majority: probably a mixed folder on purpose
+    for (const r of list) {
+      if (seasonOf(r) === major || r.nameIssues.length) continue;
+      add(r, 'warn', `Season ${seasonOf(r)} in file name; the other ${n} files are Season ${major}`, 'Check that the file belongs to this season.');
+    }
+  }
+  for (const r of state.subs) r.severity = r.flags.reduce((s, f) => SEV_RANK[f.sev] > SEV_RANK[s] ? f.sev : s, 'ok');
 }
 function subsForVideo(name) { return state.subs.filter(r => r.video === name); }
 
@@ -339,7 +392,7 @@ function rowHtml(r) {
   const typeCls = r.type === 'Forced' ? 'ty-forced' : r.type === 'CC/SDH' ? 'ty-cc' : 'ty-full';
   return `<tr class="row sev-row-${r.severity}${state.open.has(r.name) ? ' open' : ''}" data-f="${esc(r.name)}">
     <td class="dot"><span class="sd sd-${r.severity}" title="${r.severity}"></span></td>
-    <td class="fname"><div class="dn fn" title="${esc(r.name)}">${esc(r.name)}</div></td>
+    <td class="fname"><div class="dn fn" title="${esc(r.name)}">${esc(r.name)}</div>${(r.nameIssues || []).map(i => `<div class="name-issue sev-${i.sev}">⚠ ${esc(i.text)}</div>`).join('')}</td>
     <td><span class="ty ${typeCls}">${esc(r.type)}</span></td>
     <td class="${!r.rawLabel ? 'hl-error' : ''}"><code>${esc(r.rawLabel ?? '—')}</code></td>
     <td class="${expCls}">${exp}${r.match && r.match.ref && r.match.status !== 'exact' ? `<div class="muted small">list code: ${esc(r.match.ref.code)}</div>` : ''}</td>
@@ -432,6 +485,7 @@ function renderLibrary() {
       <div class="li-t"><span class="sd sd-${r.severity}"></span>${esc(langLabel(r) || 'No label')}
         <code>${esc(r.rawLabel || '—')}</code> <span class="ty ${r.type === 'Forced' ? 'ty-forced' : r.type === 'CC/SDH' ? 'ty-cc' : 'ty-full'}">${esc(r.type)}</span></div>
       <div class="li-s">${esc(state.selectedVideo && r.video === state.selectedVideo ? r.name : displayName(r))}</div>
+      ${(r.nameIssues || []).map(i => `<div class="name-issue sev-${i.sev}">⚠ ${esc(i.text)}</div>`).join('')}
       ${state.selectedVideo && r.video === state.selectedVideo ? `<div class="li-n muted">matched on ${esc(r.matchReasons.join(', '))}</div>` : ''}
     </div>`).join('');
 }

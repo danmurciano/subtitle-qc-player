@@ -158,13 +158,20 @@ const Match = (() => {
     let sc = 0;
     const sharedCode = v.codes.find(c => s.codes.includes(c));
     if (sharedCode) { sc += 100; reasons.push(`code ${sharedCode}`); }
+    // With the same production code it is the same episode, so a different season / episode number
+    // in the name is a naming mistake to report, not a reason to keep the files apart.
+    let conflict = null;
     if (v.season != null && s.season != null) {
-      if (v.season !== s.season) return { score: -100, reasons: [`season ${v.season} ≠ ${s.season}`], reject: true };
-      sc += 10; reasons.push(`season ${v.season}`);
+      if (v.season !== s.season) {
+        if (!sharedCode) return { score: -100, reasons: [`season ${v.season} ≠ ${s.season}`], reject: true };
+        conflict = Object.assign(conflict || {}, { season: [v.season, s.season] });
+      } else { sc += 10; reasons.push(`season ${v.season}`); }
     }
     if (v.episode != null && s.episode != null) {
-      if (v.episode !== s.episode) return { score: -100, reasons: [`episode ${v.episode} ≠ ${s.episode}`], reject: true };
-      sc += 30; reasons.push(`episode ${v.episode}`);
+      if (v.episode !== s.episode) {
+        if (!sharedCode) return { score: -100, reasons: [`episode ${v.episode} ≠ ${s.episode}`], reject: true };
+        conflict = Object.assign(conflict || {}, { episode: [v.episode, s.episode] });
+      } else { sc += 30; reasons.push(`episode ${v.episode}`); }
     }
     const tv = squash(v.titleWords), ts = squash(s.titleWords);
     if (tv.length >= 3 && ts.length >= 3) {
@@ -183,7 +190,7 @@ const Match = (() => {
       // Same show, both carry production codes, but they differ -> different episode.
       return { score: -100, reasons: [`code ${v.codes[0]} ≠ ${s.codes[0]}`], reject: true };
     }
-    return { score: sc, reasons };
+    return conflict ? { score: sc, reasons, conflict } : { score: sc, reasons };
   }
 
   const MATCH_THRESHOLD = 50;
