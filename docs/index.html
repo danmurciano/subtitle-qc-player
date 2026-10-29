@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
 <link rel="icon" href="icon.png">
-<title>Subtitle QC for Mac</title>
+<title>Subtitle QC Player</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
@@ -83,9 +83,9 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
 
 <div class="wrap">
   <header>
-    <img src="icon.png" alt="Subtitle QC app icon" width="96" height="96">
+    <img src="icon.png" alt="Subtitle QC Player app icon" width="96" height="96">
     <div>
-      <h1>Subtitle QC</h1>
+      <h1>Subtitle QC Player</h1>
       <p class="lede">Language conform and QC for subtitle deliveries, with a frame-accurate player that plays ProRes, H.264 and HEVC.</p>
     </div>
   </header>
@@ -93,11 +93,11 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
   <section class="get" aria-labelledby="get-h">
     <h2 id="get-h" style="margin:0">Download for Mac</h2>
     <div class="get-row">
-      <a class="dl" id="dlBtn" href="https://github.com/danmurciano/subtitle-qc-player/releases/latest/download/Subtitle-QC.zip">
+      <a class="dl" id="dlBtn" href="https://github.com/danmurciano/subtitle-qc-player/releases/latest/download/Subtitle-QC-Player.zip">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10.5 12 15.5 17 10.5"/><path d="M5 19.5h14"/></svg>
-        Download Subtitle QC
+        Download for Mac
       </a>
-      <span class="tc" id="buildInfo">Latest build · Subtitle-QC.zip</span>
+      <span class="tc" id="buildInfo">Latest build · Subtitle-QC-Player.zip</span>
     </div>
     <dl class="facts">
       <dt>Needs</dt><dd>macOS 13 Ventura or later</dd>
@@ -109,19 +109,19 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
     <h2 id="web-h" style="margin:0">Web version</h2>
     <p class="note" style="margin:0">The same tool as a single page that runs in Google Chrome on Mac or Windows, with no install. Download it, then open the file in Chrome. Chrome can't play ProRes, so for ProRes video use the Mac app.</p>
     <div class="get-row">
-      <a class="dl secondary" id="webBtn" href="https://github.com/danmurciano/subtitle-qc-player/releases/latest/download/Subtitle_QC.html">
+      <a class="dl secondary" id="webBtn" href="https://github.com/danmurciano/subtitle-qc-player/releases/latest/download/Subtitle_QC_Player.html">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10.5 12 15.5 17 10.5"/><path d="M5 19.5h14"/></svg>
         Download web version
       </a>
-      <span class="tc" id="webInfo">Subtitle_QC.html</span>
+      <span class="tc" id="webInfo">Subtitle_QC_Player.html</span>
     </div>
   </section>
 
   <section aria-labelledby="install-h">
     <h2 id="install-h">Install the Mac app</h2>
     <ol class="steps">
-      <li><div><b>Unzip</b> <span class="tc">Subtitle-QC.zip</span><p class="note">Double-click it in your Downloads folder.</p></div></li>
-      <li><div><b>Move Subtitle QC to Applications.</b></div></li>
+      <li><div><b>Unzip</b> <span class="tc">Subtitle-QC-Player.zip</span><p class="note">Double-click it in your Downloads folder.</p></div></li>
+      <li><div><b>Move Subtitle QC Player to Applications.</b></div></li>
       <li><div><b>Open it the first time</b>
         <p class="note">The app isn't signed with an Apple Developer ID, so macOS asks once.</p>
         <p class="note">macOS 13 and 14: right-click the app, choose <b>Open</b>, then <b>Open</b> again.</p>
@@ -156,11 +156,11 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
     .then(r => r.ok ? r.json() : null)
     .then(rel => {
       if (!rel) return;
-      const asset = (rel.assets || []).find(a => a.name === 'Subtitle-QC.zip');
-      const web = (rel.assets || []).find(a => a.name === 'Subtitle_QC.html');
+      const asset = (rel.assets || []).find(a => a.name === 'Subtitle-QC-Player.zip');
+      const web = (rel.assets || []).find(a => a.name === 'Subtitle_QC_Player.html');
       const webSec = document.querySelector('.get.web');
       if (!web && webSec) webSec.hidden = true;   // not published yet
-      else if (web) document.getElementById('webInfo').textContent = 'Subtitle_QC.html · ' + (web.size / 1048576).toFixed(1) + ' MB';
+      else if (web) document.getElementById('webInfo').textContent = 'Subtitle_QC_Player.html · ' + (web.size / 1048576).toFixed(1) + ' MB';
       const build = (rel.name || '').match(/build\s+(\d+)/i);
       const date = new Date(rel.published_at || rel.created_at);
       const parts = [];

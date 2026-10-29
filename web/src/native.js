@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Native Mac app bridge. When the page runs inside the Subtitle QC app
+   Native Mac app bridge. When the page runs inside the Subtitle QC Player app
    (WKWebView), folders, files, video playback, waveforms and settings go
    through the native side (AVFoundation etc.). In a normal browser NATIVE is
    false and nothing here is used.
@@ -20,7 +20,7 @@ const Native = (() => {
     for (const fn of listeners[type] || []) { try { fn(data); } catch (e) { console.error(e); } }
   };
 
-  // ---- log errors to ~/Library/Logs/Subtitle QC/app.log (helps when something goes wrong on a Mac)
+  // ---- log errors to ~/Library/Logs/Subtitle QC Player/app.log (helps when something goes wrong on a Mac)
   const log = (level, msg) => post('log', { level, msg: String(msg).slice(0, 4000) });
   window.addEventListener('error', e => log('error', `${e.message} @ ${e.filename}:${e.lineno}`));
   window.addEventListener('unhandledrejection', e => log('error', 'Unhandled: ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason)));

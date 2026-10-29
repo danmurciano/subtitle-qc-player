@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds "Subtitle QC.app" (universal: Apple Silicon + Intel, macOS 13+) and zips it.
+# Builds "Subtitle QC Player.app" (universal: Apple Silicon + Intel, macOS 13+) and zips it.
 # Runs on GitHub's Mac build machines (see .github/workflows/build.yml); also works on any Mac
 # with the Xcode command-line tools.
 set -euo pipefail
@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 VERSION="${VERSION:-0.1}"
 BUILD="${BUILD_NUMBER:-1}"
-APP="$ROOT/build/Subtitle QC.app"
+APP="$ROOT/build/Subtitle QC Player.app"
 
 rm -rf "$ROOT/build"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -30,7 +30,7 @@ run() {
 
 # 1. The interface (same single page as the web version)
 run bash -c "cd '$ROOT/web' && python3 build.py"
-cp "$ROOT/web/dist/Subtitle_QC.html" "$APP/Contents/Resources/index.html"
+cp "$ROOT/web/dist/Subtitle_QC_Player.html" "$APP/Contents/Resources/index.html"
 
 # 2. The native shell, once per CPU type, then joined into one universal binary
 SDK="$(xcrun --show-sdk-path --sdk macosx)"
@@ -52,5 +52,5 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --deep --options runtime --sign - "$APP"
 
 # 5. Zip for download
-(cd "$ROOT/build" && ditto -c -k --keepParent "Subtitle QC.app" "Subtitle-QC.zip")
+(cd "$ROOT/build" && ditto -c -k --keepParent "Subtitle QC Player.app" "Subtitle-QC-Player.zip")
 echo "Built $APP ($VERSION, build $BUILD)"

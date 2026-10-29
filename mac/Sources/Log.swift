@@ -1,10 +1,10 @@
 import Foundation
 
-/// Appends to ~/Library/Logs/Subtitle QC/app.log (Help ▸ Show Log File). Errors from the page are
+/// Appends to ~/Library/Logs/Subtitle QC Player/app.log (Help ▸ Show Log File). Errors from the page are
 /// written here too, so a problem on someone's Mac can be looked at afterwards.
 enum Log {
     static let fileURL: URL = {
-        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Subtitle QC", isDirectory: true)
+        let dir = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Subtitle QC Player", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("app.log")
     }()

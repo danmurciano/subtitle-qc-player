@@ -19,23 +19,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build Subtitle QC.app
+      - name: Build Subtitle QC Player.app
         run: BUILD_NUMBER=${{ github.run_number }} bash mac/build.sh
 
       - name: Keep the build (Actions tab)
         uses: actions/upload-artifact@v4
         with:
-          name: Subtitle-QC-build-${{ github.run_number }}
+          name: Subtitle-QC-Player-build-${{ github.run_number }}
           path: |
-            build/Subtitle-QC.zip
-            web/dist/Subtitle_QC.html
+            build/Subtitle-QC-Player.zip
+            web/dist/Subtitle_QC_Player.html
 
       - name: Publish as the latest download (Releases)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest build/Subtitle-QC.zip web/dist/Subtitle_QC.html \
+          gh release create latest build/Subtitle-QC-Player.zip web/dist/Subtitle_QC_Player.html \
             --target "$GITHUB_SHA" \
-            --title "Subtitle QC — build ${{ github.run_number }}" \
-            --notes "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'), commit ${GITHUB_SHA::7}). Mac app: Subtitle-QC.zip. Web version for Chrome: Subtitle_QC.html."
+            --title "Subtitle QC Player — build ${{ github.run_number }}" \
+            --notes "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'), commit ${GITHUB_SHA::7}). Mac app: Subtitle-QC-Player.zip. Web version for Chrome: Subtitle_QC_Player.html."

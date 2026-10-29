@@ -9,5 +9,5 @@ order=['imsc_bundle.js','native.js','util.js','config.js','detector.js','match.j
 js='const WAVE_WORKER_SRC = ' + __import__('json').dumps(R('src/wave_worker.js').read_text()) + ';\n' + '\n'.join(R('src/'+f).read_text().replace("if (typeof module !== 'undefined') module.exports = Detector;",'').replace("if (typeof module !== 'undefined') module.exports = Match;",'') for f in order)
 s=R('src/template.html').read_text().replace('/*__PLAYER_CSS__*/',css).replace('/*__JS__*/',js)
 R('dist').mkdir(exist_ok=True)
-R('dist/Subtitle_QC.html').write_text(s)
+R('dist/Subtitle_QC_Player.html').write_text(s)
 print(len(s), 'body{' in css, 'h1 {' in css)
