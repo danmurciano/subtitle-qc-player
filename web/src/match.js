@@ -78,14 +78,21 @@ const Match = (() => {
         if (/^\d{2}$/.test(lo[i + 1] || '') && /^\d{2}$/.test(lo[i + 2] || '')) end = i + 3;
         info.anchor = toks.slice(start, end).join('_');
       } else if ((m = lo[i].match(/^(?:ep|e)(\d{1,3})$/)) && i > 0) { info.episode = +m[1]; start = i; end = i + 1; info.anchor = toks[i]; }
+      else if (/^(episode|ep)$/.test(lo[i]) && /^\d{1,3}$/.test(lo[i + 1] || '') && i > 0) { info.episode = +lo[i + 1]; start = i; end = i + 2; info.anchor = toks.slice(i, i + 2).join(' '); }
     }
 
-    // A season on its own (Warehouse13_S4_T7701_…): only when nothing better was found, and only
-    // early in the name, right after the show.
-    if (start < 0) {
-      for (let i = 1; i < Math.min(lo.length, 5); i++) {
-        const m = lo[i].match(/^(?:s|season)(\d{1,2})$/);
-        if (m && +m[1] > 0) { info.season = +m[1]; start = i; end = i + 1; info.anchor = toks[i]; break; }
+    // A season written on its own (Warehouse13_S4_T7701, Show_Season2_EP03, Show_S2_E3, Series 2,
+    // Season Two, Saison 2 …): before an episode marker, or early in the name, right after the show.
+    if (info.season == null) {
+      const limit = start >= 0 ? start : Math.min(lo.length, 6);
+      for (let i = 1; i < limit; i++) {
+        const sa = seasonAt(lo, i);
+        if (sa && sa[0] > 0) {
+          info.season = sa[0];
+          if (start < 0) { end = i + sa[1]; info.anchor = toks.slice(i, i + sa[1]).join('_'); }
+          start = i;
+          break;
+        }
       }
     }
 
@@ -126,6 +133,34 @@ const Match = (() => {
     else if (j < toks.length) return false;
     for (; j < toks.length; j++) if (!isStop(lo[j]) && !isLanguageWord(lo[j]) && !LANG_BASES.has(lo[j]) && !isRegion(toks[j])) return false;
     return true;
+  }
+
+  // "s2", "se02", "season2", "series2" … or a season word followed by a number ("season 2", "series two").
+  const SEASON_WORDS = 'season|series|saison|staffel|temporada|stagione|seizoen|sezon|sezona|sasong|säsong|sæson|sesong|kausi';
+  const SEASON_TOKEN = new RegExp('^(?:s|se|' + SEASON_WORDS + ')(\\d{1,2})$');
+  const SEASON_WORD = new RegExp('^(?:' + SEASON_WORDS + ')$');
+  const NUM_WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+    thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20 };
+  function seasonAt(lo, i) {
+    const m = lo[i].match(SEASON_TOKEN);
+    if (m) return [+m[1], 1];
+    if (SEASON_WORD.test(lo[i]) && i + 1 < lo.length) {
+      const n = lo[i + 1];
+      if (/^\d{1,2}$/.test(n)) return [+n, 2];
+      if (NUM_WORDS[n]) return [NUM_WORDS[n], 2];
+    }
+    return null;
+  }
+  // Season named anywhere in a text such as a folder name ("Season_02", "S2", "YR02", "S02E01").
+  function seasonFromText(text) {
+    const lo = String(text || '').split(/[^\p{L}\p{N}]+/u).filter(Boolean).map(t => t.toLowerCase());
+    for (let i = 0; i < lo.length; i++) {
+      let m;
+      if ((m = lo[i].match(/^s(\d{1,2})e\d{1,3}$/)) || (m = lo[i].match(/^yr(\d{1,2})$/))) return +m[1];
+      const sa = seasonAt(lo, i);
+      if (sa) return sa[0];
+    }
+    return null;
   }
 
   function isLanguageWord(t) {
@@ -226,6 +261,6 @@ const Match = (() => {
     return { show: withArticle(art, infos[0].showWords), season: sameSeason ? season : null,
              label: withArticle(art, infos[0].showWords) + (sameSeason ? ` · Season ${season}` : ''), opts: { omitShow: true, omitSeason: sameSeason } };
   }
-  return { common, showName, titleCase: cap, parse, score, MATCH_THRESHOLD, episodeKey, episodeTitle, dice };
+  return { seasonFromText, common, showName, titleCase: cap, parse, score, MATCH_THRESHOLD, episodeKey, episodeTitle, dice };
 })();
 if (typeof module !== 'undefined') module.exports = Match;

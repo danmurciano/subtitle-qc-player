@@ -175,10 +175,7 @@ function assign() {
 // Compares the season (and episode) in each subtitle file name with: its matched video, the chosen
 // folder's name, and the other subtitle files of the same show. Mismatches are shown under the
 // file name on the Conform page and count as errors / warnings.
-function seasonFromText(t) {
-  const m = String(t || '').match(/(?:^|[^a-z0-9])(?:season|s|yr)[\s_.-]*0*(\d{1,2})(?![0-9])/i);
-  return m ? +m[1] : null;
-}
+const seasonFromText = (t) => Match.seasonFromText(t);
 function nameChecks() {
   const KIND = 'name';
   for (const r of state.subs) { r.flags = (r.flags || []).filter(f => f.kind !== KIND); r.nameIssues = []; }
