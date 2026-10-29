@@ -8,7 +8,9 @@ QC player with waveform, frame-accurate timecode and subtitle rendering.
 - **Web version** (`web/`): the same interface as a single offline HTML file for Chrome.
 
 ## Getting the app
-Every push to `main` builds the app on GitHub (Actions tab). The latest build is under
+Download page: **https://danmurciano.github.io/subtitle-qc-player/** (always the latest build).
+
+Every push to `main` builds the app on GitHub (Actions tab) and publishes it under
 **Releases → latest → Subtitle-QC.zip**.
 
 1. Download and unzip `Subtitle-QC.zip`, move **Subtitle QC** to Applications.
