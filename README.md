@@ -5,7 +5,8 @@ QC player with waveform, frame-accurate timecode and subtitle rendering.
 
 - **Mac app** (`mac/`): the interface in a native window, with video played by AVFoundation (ProRes,
   H.264, HEVC), native waveforms and real folders. Universal (Apple Silicon + Intel), macOS 13 or later.
-- **Web version** (`web/`): the same interface as a single offline HTML file for Chrome.
+- **Web version** (`web/`): the same interface as a single offline HTML file for Chrome
+  (also published with every build as `Subtitle_QC.html`).
 
 ## Getting the app
 Download page: **https://danmurciano.github.io/subtitle-qc-player/** (always the latest build).

@@ -26,14 +26,16 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Subtitle-QC-build-${{ github.run_number }}
-          path: build/Subtitle-QC.zip
+          path: |
+            build/Subtitle-QC.zip
+            web/dist/Subtitle_QC.html
 
       - name: Publish as the latest download (Releases)
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest build/Subtitle-QC.zip \
+          gh release create latest build/Subtitle-QC.zip web/dist/Subtitle_QC.html \
             --target "$GITHUB_SHA" \
             --title "Subtitle QC — build ${{ github.run_number }}" \
-            --notes "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'), commit ${GITHUB_SHA::7}). Download Subtitle-QC.zip below."
+            --notes "Latest build ($(date -u '+%Y-%m-%d %H:%M UTC'), commit ${GITHUB_SHA::7}). Mac app: Subtitle-QC.zip. Web version for Chrome: Subtitle_QC.html."

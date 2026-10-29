@@ -55,6 +55,7 @@ h1 { font: 600 clamp(28px, 5vw, 36px)/1.15 var(--sans); margin: 0; letter-spacin
 }
 .dl:hover { filter: brightness(1.08); }
 .dl:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.dl.secondary { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--accent); }
 .dl[disabled] { opacity: .55; cursor: default; filter: none; }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; margin: 0; }
 .facts dt { color: var(--dim); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; padding-top: 2px; }
@@ -104,8 +105,20 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
     </dl>
       </section>
 
+  <section class="get web" aria-labelledby="web-h">
+    <h2 id="web-h" style="margin:0">Web version</h2>
+    <p class="note" style="margin:0">The same tool as a single page that runs in Google Chrome on Mac or Windows, with no install. Download it, then open the file in Chrome. Chrome can't play ProRes, so for ProRes video use the Mac app.</p>
+    <div class="get-row">
+      <a class="dl secondary" id="webBtn" href="https://github.com/danmurciano/subtitle-qc-player/releases/latest/download/Subtitle_QC.html">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 10.5 12 15.5 17 10.5"/><path d="M5 19.5h14"/></svg>
+        Download web version
+      </a>
+      <span class="tc" id="webInfo">Subtitle_QC.html</span>
+    </div>
+  </section>
+
   <section aria-labelledby="install-h">
-    <h2 id="install-h">Install</h2>
+    <h2 id="install-h">Install the Mac app</h2>
     <ol class="steps">
       <li><div><b>Unzip</b> <span class="tc">Subtitle-QC.zip</span><p class="note">Double-click it in your Downloads folder.</p></div></li>
       <li><div><b>Move Subtitle QC to Applications.</b></div></li>
@@ -144,6 +157,10 @@ footer { color: var(--dim); font-size: 13px; border-top: 1px solid var(--line); 
     .then(rel => {
       if (!rel) return;
       const asset = (rel.assets || []).find(a => a.name === 'Subtitle-QC.zip');
+      const web = (rel.assets || []).find(a => a.name === 'Subtitle_QC.html');
+      const webSec = document.querySelector('.get.web');
+      if (!web && webSec) webSec.hidden = true;   // not published yet
+      else if (web) document.getElementById('webInfo').textContent = 'Subtitle_QC.html · ' + (web.size / 1048576).toFixed(1) + ' MB';
       const build = (rel.name || '').match(/build\s+(\d+)/i);
       const date = new Date(rel.published_at || rel.created_at);
       const parts = [];
