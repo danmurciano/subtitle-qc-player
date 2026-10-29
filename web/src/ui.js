@@ -5,7 +5,7 @@ const state = {
   subs: [], videos: [],
   subFolder: '', vidFolder: '', subHandle: null, vidHandle: null,
   groupBy: Store.get('groupBy') === 'episode' ? 'episode' : 'name', issuesOnly: false,
-  open: new Set(), collapsed: new Set(),
+  open: new Set(), expanded: new Set(),   // groups start collapsed; these are the ones opened
   selectedVideo: null, busy: false, matchedOnly: Store.get('matchedOnly') !== 'all', ignoredVideos: [], subCount: 0, vidCount: 0,
 };
 const STATUS_OPTS = [['', 'Not reviewed'], ['progress', 'In progress'], ['done', 'Done'], ['issues', 'Has issues']];
@@ -339,7 +339,7 @@ function renderQC() {
     const rows = state.issuesOnly ? g.rows.filter(r => r.severity === 'error' || r.severity === 'warn') : g.rows;
     if (state.issuesOnly && !rows.length) continue;
     const e = g.rows.filter(r => r.severity === 'error').length, w = g.rows.filter(r => r.severity === 'warn').length;
-    const col = state.collapsed.has(g.key);
+    const col = !state.expanded.has(g.key);
     const status = Store.get('status:' + g.key) || '';
     const meta = g.video ? `<span class="muted small" title="${esc(g.video)}">🎬 ${esc(g.video)}</span>` : g.noVideo ? `<span class="tag-novideo">no matching video</span>` : '';
     html += `<section class="card st-${status || 'none'}" data-g="${esc(g.key)}">
@@ -358,6 +358,9 @@ function renderQC() {
     }
     html += `</section>`;
   }
+  const keys = [...groupsFor(list)].map(g => g.key);
+  const eb = $('#expandAll');
+  if (eb) { eb.textContent = keys.length && keys.every(k => state.expanded.has(k)) ? 'Collapse all' : 'Expand all'; eb.hidden = !keys.length; }
   host.innerHTML = html || `<div class="none">No issues found.</div>`;
 }
 
@@ -372,7 +375,7 @@ function cueChecksHtml(c) {
 function rowHtml(r) {
   const d = r.detected;
   const exp = r.expected ? esc(r.expected.names.map(prettyName).join(' / ')) : '<span class="muted">—</span>';
-  const expCls = r.match && r.match.status === 'exact' ? '' : r.match && (r.match.status === 'equivalent' || r.match.status === 'base') ? 'hl-warn' : r.match ? 'hl-error' : '';
+  const expCls = r.match && (r.match.status === 'exact' || r.match.status === 'regional') ? '' : r.match && (r.match.status === 'equivalent' || r.match.status === 'base') ? 'hl-warn' : r.match ? 'hl-error' : '';
   let det = '<span class="muted">—</span>';
   if (d && d.lang) {
     const main = r.breakdown.find(b => b.lang === d.lang);
@@ -420,7 +423,7 @@ function detailHtml(r) {
       <div class="kv"><span>Format</span>${esc(r.format || '—')}${r.cueCount != null ? ` · ${r.cueCount} cue${r.cueCount === 1 ? '' : 's'}` : ''}</div>
       <h4>Labels &amp; name</h4>
       <div class="kv"><span>xml:lang on &lt;tt&gt;</span><code>${esc(r.rawLabel ?? '(none)')}</code></div>
-      <div class="kv"><span>List match</span>${r.match ? esc({ exact: 'exact', equivalent: 'equivalent code', base: 'base language only', unknown: 'not in list', missing: '—' }[r.match.status]) : '—'}${r.expected ? ` → <code>${esc(r.expected.code)}</code> ${esc(r.expected.names.join(', '))}` : ''}</div>
+      <div class="kv"><span>List match</span>${r.match ? esc({ exact: 'exact', regional: 'regional variant of a list code', equivalent: 'equivalent code', base: 'base language only', unknown: 'not in list', missing: '—' }[r.match.status]) : '—'}${r.expected ? ` → <code>${esc(r.expected.code)}</code> ${esc(r.expected.names.join(', '))}` : ''}</div>
       <div class="kv"><span>Language in name</span>${r.fileLang ? `<code>${esc(r.fileLang.src)}</code> → ${esc(r.fileLang.code)}` : '<span class="muted">none found</span>'}</div>
       <div class="kv"><span>Episode in name</span>${esc(nameBits || '—')}</div>
       <div class="kv"><span>Video</span>${r.video ? `${esc(r.video)} <span class="muted">(matched on ${esc(r.matchReasons.join(', '))})</span>` : `<span class="muted">${state.videos.length ? 'no match' : 'no videos folder'}</span>`}</div>
@@ -560,7 +563,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
   $('#groupBy').value = state.groupBy;
-  $('#groupBy').onchange = e => { state.groupBy = e.target.value; Store.set('groupBy', state.groupBy); state.collapsed.clear(); renderQC(); };
+  $('#groupBy').onchange = e => { state.groupBy = e.target.value; Store.set('groupBy', state.groupBy); state.expanded.clear(); renderQC(); };
+  $('#expandAll').onclick = () => {
+    const keys = [...document.querySelectorAll('#groups section.card')].map(c => c.dataset.g);
+    const allOpen = keys.length && keys.every(k => state.expanded.has(k));
+    if (allOpen) state.expanded.clear(); else keys.forEach(k => state.expanded.add(k));
+    renderQC();
+  };
   $('#issuesOnly').onchange = e => { state.issuesOnly = e.target.checked; renderQC(); };
   $('#groups').addEventListener('change', e => {
     const s = e.target.closest("select.rstatus");
@@ -576,7 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ov = e.target.closest('button.open-video');
     if (ov) { setTab('player'); return selectVideo(ov.dataset.v); }
     const head = e.target.closest('.card-h');
-    if (head) { const k = head.parentElement.dataset.g; state.collapsed.has(k) ? state.collapsed.delete(k) : state.collapsed.add(k); return renderQC(); }
+    if (head) { const k = head.parentElement.dataset.g; state.expanded.has(k) ? state.expanded.delete(k) : state.expanded.add(k); return renderQC(); }
     const row = e.target.closest('tr.row');
     if (row) { const f = row.dataset.f; state.open.has(f) ? state.open.delete(f) : state.open.add(f); renderQC(); }
   });

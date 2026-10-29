@@ -1,6 +1,6 @@
 # Subtitle QC
 
-Subtitle conform and QC tool: language checks for subtitle folders (TTML, IMSC, iTT, DFXP, XML) and a
+Subtitle conform and QC tool: language checks for subtitle folders (TTML, IMSC, iTT, DFXP, XML, WebVTT) and a
 QC player with waveform, frame-accurate timecode and subtitle rendering.
 
 - **Mac app** (`mac/`): the interface in a native window, with video played by AVFoundation (ProRes,

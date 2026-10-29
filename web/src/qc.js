@@ -2,7 +2,7 @@
    Subtitle Language Check — app logic
    ========================================================================== */
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
-const SUB_EXT = /\.(ttml|dfxp|xml|itt|imsc|imscr|imsc1|ttml2)$/i;
+const SUB_EXT = /\.(ttml|dfxp|xml|itt|imsc|imscr|imsc1|ttml2|vtt)$/i;
 const VIDEO_EXT = /\.(mp4|mov|m4v)$/i;
 
 // ------------------------------------------------------------ reference list
@@ -61,7 +61,12 @@ function matchReference(raw) {
     if (r) return { status: 'equivalent', tag: t, canon: c, ref: r };
   }
   const baseRef = REF_BY_CODE.get(c.lang);
-  if (baseRef) return { status: 'base', tag: t, canon: c, ref: baseRef };
+  if (baseRef) {
+    // "en-US" when the list only has "en": a regional label of a listed language is fine. Only when
+    // the list also has regional entries (fr-FR, fr-CA …) is the plain "fr" a vague match.
+    const regional = [...REF_BY_CODE.keys()].some(k => k.startsWith(c.lang + '-'));
+    return { status: regional ? 'base' : 'regional', tag: t, canon: c, ref: baseRef };
+  }
   if (REF_BASES.has(c.lang)) {
     // Base exists only with regions (e.g. "es-US" when list has es-ES/es-419/…)
     const opts = [...REF_BY_CODE.values()].filter(r => r.code.toLowerCase().startsWith(c.lang + '-'));
@@ -227,9 +232,11 @@ async function analyzeFile(file) {
   const flag = (sev, text, detail) => r.flags.push({ sev, text, detail });
   let parsed;
   try {
-    const { text, encoding } = await readText(file);
+    let { text, encoding } = await readText(file);
     r.encoding = encoding;
+    if (Vtt.isVtt(text, file.name)) { r.isVtt = true; text = Vtt.toTTML(text); }
     parsed = parseSubtitle(text, file.name);
+    if (r.isVtt && !parsed.error && !parsed.notTTML) parsed.format = 'WebVTT';
   } catch (e) { parsed = { error: String(e && e.message || e) }; }
   if (parsed.notTTML) return null;              // not a subtitle file (e.g. other .xml)
   r.fileLang = languageFromFilename(file.name);
@@ -242,12 +249,18 @@ async function analyzeFile(file) {
   cueChecks(r, parsed, flag);
 
   // ---- label vs reference list
-  const m = matchReference(parsed.rootLang);
+  // WebVTT has no language label of its own (unless a "Language:" header): use the file name's.
+  const lab = parsed.rootLang || (r.isVtt && r.fileLang ? r.fileLang.code : null);
+  if (r.isVtt && !parsed.rootLang) {
+    if (r.fileLang) flag('info', 'WebVTT has no language label', `Checked against the language in the file name (${r.fileLang.code}).`);
+    else flag('error', 'No language label', 'WebVTT files carry no language label, and the file name has none either.');
+  }
+  const m = matchReference(lab);
   r.match = m;
-  if (m.status === 'missing') flag('error', 'No xml:lang on <tt>', 'The root <tt> element has no xml:lang attribute (or it is empty).');
-  else if (m.status === 'unknown') flag('error', `Label “${parsed.rootLang}” is not in the reference list`, 'No matching code or base language in the DETE list.');
-  else if (m.status === 'equivalent') flag('warn', `Non-standard code “${parsed.rootLang}”`, `Equivalent to list code “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
-  else if (m.status === 'base') flag('warn', `“${parsed.rootLang}” is not an exact list code`, m.options ? `List has: ${m.options.map(o => o.code).join(', ')}.` : `Closest list code: “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
+  if (m.status === 'missing') { if (!r.isVtt) flag('error', 'No xml:lang on <tt>', 'The root <tt> element has no xml:lang attribute (or it is empty).'); }
+  else if (m.status === 'unknown') flag('error', `Label “${lab}” is not in the reference list`, 'No matching code or base language in the DETE list.');
+  else if (m.status === 'equivalent') flag('warn', `Non-standard code “${lab}”`, `Equivalent to list code “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
+  else if (m.status === 'base') flag('warn', `“${lab}” is not an exact list code`, m.options ? `List has: ${m.options.map(o => o.code).join(', ')}.` : `Closest list code: “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
 
   const labelTag = m.tag ? canonical(m.tag) : null;
   const expBase = labelTag ? labelTag.lang : null;

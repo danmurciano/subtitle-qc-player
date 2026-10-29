@@ -154,6 +154,7 @@
       return;
     }
     vmeta.fps = (probe && probe.fps) || 0;
+    syncVttRates();
     vmeta.duration = (probe && probe.duration) || 0;
     fpsOverride = 0;
     setStartTimecode(null);
@@ -275,8 +276,17 @@
     } catch (e) { console.warn('Region normalisation skipped', e); return xmlStr; }
   }
 
+  let subIsVtt = false;
+  // WebVTT times are plain clock times with no frame rate: timecodes use the video's frame rate.
+  function syncVttRates() {
+    if (!subIsVtt) return;
+    const f = vmeta.fps || 0;
+    if (f) { docFrameRate = Math.round(f); docEffectiveFrameRate = f; }
+  }
   function loadSubtitle(xmlStr, name) {
-    setSpeed(0);   // a new subtitle keeps the playhead where it is, but stops playback
+    setSpeed(0);
+    subIsVtt = Vtt.isVtt(xmlStr, name);
+    if (subIsVtt) xmlStr = Vtt.toTTML(xmlStr);   // a new subtitle keeps the playhead where it is, but stops playback
     if (stageMsgKind === 'sub') showStageMsg('');
     xmlStr = nearestRegions(smpteToMedia(xmlStr));
     currentSub = { name, text: xmlStr };
@@ -303,6 +313,7 @@
       setStatus(subStatus, `No subtitle events found in ${name}.`, 'err');
       return;
     }
+    syncVttRates();
     const langTag = getXmlLangTagSafe(xmlStr);
     const rateLabel = formatRateLabel(docEffectiveFrameRate);
     qcFrameRateInput.value = rateLabel;
@@ -324,6 +335,7 @@
     currentVideo: () => currentVideoName,
     currentVideoFile: () => currentVideoFile,
     currentSubtitle: () => currentSub && currentSub.name,
+    subtitleHasFps: () => !subIsVtt,
     showMessage: (html, kind) => { if (stage) showStageMsg(html, kind); },
     movedMessage: (name) => MOVED_MSG(name),
     fileReadable,

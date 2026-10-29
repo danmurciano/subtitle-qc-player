@@ -708,7 +708,7 @@
   function updateFps() {
     const loaded = !!(video && video.currentSrc);
     const vf = vmeta.fps || fpsOverride || 0;
-    const sf = cueList.length ? docEffectiveFrameRate : 0;
+    const sf = cueList.length && window.Player.subtitleHasFps() ? docEffectiveFrameRate : 0;
     const key = [loaded, vmeta.fps, fpsOverride, sf].join('|');
     if (key === fpsKey) return;
     fpsKey = key;
