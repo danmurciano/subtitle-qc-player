@@ -15,10 +15,9 @@ Every push to `main` builds the app on GitHub (Actions tab) and publishes it und
 **Releases → latest → Subtitle-QC-Player.zip**.
 
 1. Download and unzip `Subtitle-QC-Player.zip`, move **Subtitle QC Player** to Applications.
-2. First launch only — the app isn't signed with a paid Apple Developer ID, so macOS asks once:
-   - macOS 13–14: right-click the app → **Open** → **Open**.
-   - macOS 15: open it once (it will be blocked), then **System Settings → Privacy & Security** →
-     **Open Anyway**.
+2. First launch only: macOS blocks the app once because it isn't signed with an Apple Developer ID.
+   Click **Done**, then **System Settings → Privacy & Security → Open Anyway** (on a work Mac this
+   may need an administrator's password).
 
 Problems are logged to `~/Library/Logs/Subtitle QC Player/app.log` (Help ▸ Show Log File).
 
