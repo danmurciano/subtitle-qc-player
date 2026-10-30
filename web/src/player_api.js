@@ -276,8 +276,8 @@
     } catch (e) { console.warn('Region normalisation skipped', e); return xmlStr; }
   }
 
-  let subIsVtt = false;
-  // WebVTT times are plain clock times with no frame rate: timecodes use the video's frame rate.
+  let subIsVtt = false, subFormat = '';
+  // WebVTT and SRT times are plain clock times with no frame rate: timecodes use the video's frame rate.
   function syncVttRates() {
     if (!subIsVtt) return;
     const f = vmeta.fps || 0;
@@ -285,8 +285,11 @@
   }
   function loadSubtitle(xmlStr, name) {
     setSpeed(0);
-    subIsVtt = Vtt.isVtt(xmlStr, name);
-    if (subIsVtt) xmlStr = Vtt.toTTML(xmlStr);   // a new subtitle keeps the playhead where it is, but stops playback
+    // a new subtitle keeps the playhead where it is, but stops playback
+    const side = Sidecar.convert(xmlStr, name);   // WebVTT / SRT / SCC -> TTML
+    subFormat = side ? side.format : '';
+    subIsVtt = !!side && !side.hasFps;
+    if (side) xmlStr = side.ttml;
     if (stageMsgKind === 'sub') showStageMsg('');
     xmlStr = nearestRegions(smpteToMedia(xmlStr));
     currentSub = { name, text: xmlStr };
@@ -336,6 +339,7 @@
     currentVideoFile: () => currentVideoFile,
     currentSubtitle: () => currentSub && currentSub.name,
     subtitleHasFps: () => !subIsVtt,
+    subtitleFormat: () => subFormat,
     showMessage: (html, kind) => { if (stage) showStageMsg(html, kind); },
     movedMessage: (name) => MOVED_MSG(name),
     fileReadable,

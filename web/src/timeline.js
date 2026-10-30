@@ -725,8 +725,11 @@
       html += `<select id="fpsOverride" title="The video's frame rate couldn't be read. Pick it to keep frame steps and timecode exact.">` +
         `<option value="">?</option>` + STD_FPS.map(([r, l]) => `<option value="${r}"${Math.abs(r - fpsOverride) < 0.001 ? ' selected' : ''}>${l}</option>`).join('') + `</select>`;
     } else html += vf ? `<span>${fpsLabel(vf)}</span>` : '<span class="muted">—</span>';
-    const mismatch = vf && sf && Math.abs(vf - sf) > 0.01;
-    html += `<span class="k">Subs fps</span>` + (sf ? `<span class="${mismatch ? 'mis' : ''}" title="${mismatch ? 'The subtitle file declares a different frame rate than the video — timing will drift.' : "The subtitle file's declared frame rate."}">${fpsLabel(sf)}${mismatch ? ' ⚠' : ''}</span>` : '<span class="muted">—</span>');
+    // SCC timecode is 29.97 by convention and plays in sync with any video rate.
+    const scc = window.Player.subtitleFormat && window.Player.subtitleFormat() === 'SCC' && Math.abs(sf - 29.97) < 0.01;
+    const mismatch = vf && sf && !scc && Math.abs(vf - sf) > 0.01;
+    const tip = scc ? 'SCC captions are timed in 29.97 timecode by convention. They stay in sync with any video frame rate.' : mismatch ? 'The subtitle file declares a different frame rate than the video — timing will drift.' : "The subtitle file's declared frame rate.";
+    html += `<span class="k">Subs fps</span>` + (sf ? `<span class="${mismatch ? 'mis' : ''}" title="${tip}">${fpsLabel(sf)}${scc ? ' SCC' : ''}${mismatch ? ' ⚠' : ''}</span>` : '<span class="muted">—</span>');
     fpsBox.innerHTML = html;
     const sel = document.getElementById('fpsOverride');
     if (sel) sel.addEventListener('change', () => { fpsOverride = +sel.value || 0; vmeta.fps = 0; tlDirty = true; updateFps(); });

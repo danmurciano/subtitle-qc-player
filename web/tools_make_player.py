@@ -6,6 +6,14 @@ def rep(old,new,count=1):
     assert js.count(old)>=1, old[:60]
     js=js.replace(old,new,count)
 
+
+# Leading/trailing spaces on a line (SCC column indents) are not counted as characters or shown.
+rep("""        const lineTexts = lines.map(line => line.map(seg => seg.ruby ? `(${seg.text})` : seg.text).join(''));""",
+    """        const lineTexts = lines.map(line => line.map(seg => seg.ruby ? `(${seg.text})` : seg.text).join('').trim());""")
+rep("""          Array.from(line.filter(seg => !seg.ruby).map(seg => seg.text).join('')).length""",
+    """          Array.from(line.filter(seg => !seg.ruby).map(seg => seg.text).join('').trim()).length""")
+rep("""    const lens = lines.map(l => Array.from(l).length);""","""    const lens = lines.map(l => Array.from(l.trim()).length);""")
+
 rep("""  const videoInput = document.getElementById('videoInput');
   const subInput = document.getElementById('subInput');
 ""","")

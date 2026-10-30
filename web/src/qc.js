@@ -2,7 +2,7 @@
    Subtitle Language Check — app logic
    ========================================================================== */
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
-const SUB_EXT = /\.(ttml|dfxp|xml|itt|imsc|imscr|imsc1|ttml2|vtt)$/i;
+const SUB_EXT = /\.(ttml|dfxp|xml|itt|imsc|imscr|imsc1|ttml2|vtt|srt|scc)$/i;
 const VIDEO_EXT = /\.(mp4|mov|m4v)$/i;
 
 // ------------------------------------------------------------ reference list
@@ -234,9 +234,10 @@ async function analyzeFile(file) {
   try {
     let { text, encoding } = await readText(file);
     r.encoding = encoding;
-    if (Vtt.isVtt(text, file.name)) { r.isVtt = true; text = Vtt.toTTML(text); }
+    const side = Sidecar.convert(text, file.name);       // WebVTT / SRT / SCC -> TTML
+    if (side) { r.sidecar = side.format; text = side.ttml; }
     parsed = parseSubtitle(text, file.name);
-    if (r.isVtt && !parsed.error && !parsed.notTTML) parsed.format = 'WebVTT';
+    if (side && !parsed.error && !parsed.notTTML) parsed.format = side.format;
   } catch (e) { parsed = { error: String(e && e.message || e) }; }
   if (parsed.notTTML) return null;              // not a subtitle file (e.g. other .xml)
   r.fileLang = languageFromFilename(file.name);
@@ -249,15 +250,16 @@ async function analyzeFile(file) {
   cueChecks(r, parsed, flag);
 
   // ---- label vs reference list
-  // WebVTT has no language label of its own (unless a "Language:" header): use the file name's.
-  const lab = parsed.rootLang || (r.isVtt && r.fileLang ? r.fileLang.code : null);
-  if (r.isVtt && !parsed.rootLang) {
-    if (r.fileLang) flag('info', 'WebVTT has no language label', `Checked against the language in the file name (${r.fileLang.code}).`);
-    else flag('error', 'No language label', 'WebVTT files carry no language label, and the file name has none either.');
+  // WebVTT, SRT and SCC have no language label of their own (WebVTT may have a "Language:" header):
+  // use the file name's.
+  const lab = parsed.rootLang || (r.sidecar && r.fileLang ? r.fileLang.code : null);
+  if (r.sidecar && !parsed.rootLang) {
+    if (r.fileLang) flag('info', `${r.sidecar} has no language label`, `Checked against the language in the file name (${r.fileLang.code}).`);
+    else flag('error', 'No language label', `${r.sidecar} files carry no language label, and the file name has none either.`);
   }
   const m = matchReference(lab);
   r.match = m;
-  if (m.status === 'missing') { if (!r.isVtt) flag('error', 'No xml:lang on <tt>', 'The root <tt> element has no xml:lang attribute (or it is empty).'); }
+  if (m.status === 'missing') { if (!r.sidecar) flag('error', 'No xml:lang on <tt>', 'The root <tt> element has no xml:lang attribute (or it is empty).'); }
   else if (m.status === 'unknown') flag('error', `Label “${lab}” is not in the reference list`, 'No matching code or base language in the DETE list.');
   else if (m.status === 'equivalent') flag('warn', `Non-standard code “${lab}”`, `Equivalent to list code “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
   else if (m.status === 'base') flag('warn', `“${lab}” is not an exact list code`, m.options ? `List has: ${m.options.map(o => o.code).join(', ')}.` : `Closest list code: “${m.ref.code}” (${m.ref.names.map(prettyName).join(' / ')}).`);
@@ -399,7 +401,9 @@ function cueChecks(r, parsed, flag) {
   }
   const nameFps = r.nameInfo.fps ? NAME_FPS[r.nameInfo.fps] : null;
   r.nameFps = nameFps;
-  if (nameFps && eff && Math.abs(nameFps - eff) > 0.01)
+  // SCC timecode is 29.97 by convention whatever the video's rate, so that is not a mismatch.
+  const sccNtsc = r.sidecar === 'SCC' && eff && Math.abs(eff - 29.97) < 0.01;
+  if (nameFps && eff && !sccNtsc && Math.abs(nameFps - eff) > 0.01)
     flag('warn', `Frame rate: name says ${nameFps}, file declares ${+eff.toFixed(3)}`, `ttp:frameRate="${declared}"${r.fileFps !== Number(declared) ? ' with frameRateMultiplier' : ''}.`);
 
   // Same checks as the player's sidebar filters.
