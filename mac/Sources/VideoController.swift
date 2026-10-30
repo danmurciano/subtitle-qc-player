@@ -30,11 +30,11 @@ final class VideoController: NSObject {
         }
         timeObs = player.addPeriodicTimeObserver(forInterval: CMTime(value: 1, timescale: 30), queue: .main) { [weak self] t in
             guard let self = self, self.player.rate != 0, !self.seekBusy else { return }
-            self.bridge?.emit("videoTime", ["t": t.seconds.finiteOr(0), "rate": Double(self.player.rate)])
+            self.bridge?.emit("videoTime", ["t": max(0, t.seconds.finiteOr(0)), "rate": Double(self.player.rate)])
         }
     }
 
-    private var now: Double { player.currentTime().seconds.finiteOr(0) }
+    private var now: Double { max(0, player.currentTime().seconds.finiteOr(0)) }
 
     func load(path: String, id: Int) {
         unload()
@@ -63,7 +63,7 @@ final class VideoController: NSObject {
         guard id == loadId, it === item else { return }
         switch it.status {
         case .readyToPlay:
-            let duration = it.duration.seconds.finiteOr(0), canReverse = it.canPlayReverse
+            let duration = it.duration.seconds.finiteOr(0), canReverse = it.canPlayReverse, canFastReverse = it.canPlayFastReverse
             Task {
                 var size = CGSize.zero
                 if let tracks = try? await asset.loadTracks(withMediaType: .video), let track = tracks.first,
@@ -73,7 +73,7 @@ final class VideoController: NSObject {
                 let w = Double(size.width), h = Double(size.height)
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self, id == self.loadId else { return }
-                    self.bridge?.emit("videoMeta", ["id": id, "duration": duration, "width": w, "height": h, "canReverse": canReverse])
+                    self.bridge?.emit("videoMeta", ["id": id, "duration": duration, "width": w, "height": h, "canReverse": canReverse, "canFastReverse": canFastReverse])
                 }
             }
         case .failed:
@@ -105,20 +105,26 @@ final class VideoController: NSObject {
         lastPaused = false
         player.rate = Float(rate == 0 ? 1 : rate)
     }
-    func pause() { lastPaused = true; player.pause() }
+    func pause() {
+        lastPaused = true; player.pause()
+        bridge?.emit("videoState", ["paused": true, "t": now, "rate": 0])   // the page learns the exact stop position
+    }
     func setRate(_ rate: Double) { if player.rate != 0 { player.rate = Float(rate) } }
     func setVolume(_ v: Double, muted: Bool) { player.volume = Float(v); player.isMuted = muted }
 
-    /// Frame-exact seeks. While one is running, only the latest request is kept (smooth scrubbing).
-    func seek(_ t: Double) {
+    /// Frame-exact seeks (or, with fast, the nearest earlier keyframe, for shuttling). While one is
+    /// running, only the latest request is kept (smooth scrubbing).
+    private var pendingFast = false
+    func seek(_ t: Double, fast: Bool = false) {
         guard item != nil else { return }
-        if seekBusy { pendingSeek = t; return }
+        if seekBusy { pendingSeek = t; pendingFast = fast; return }
         seekBusy = true
-        player.seek(to: CMTime(seconds: max(0, t), preferredTimescale: 600_000), toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] _ in
+        let before = fast ? CMTime(seconds: 3, preferredTimescale: 600) : .zero
+        player.seek(to: CMTime(seconds: max(0, t), preferredTimescale: 600_000), toleranceBefore: before, toleranceAfter: .zero) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.seekBusy = false
-                if let next = self.pendingSeek { self.pendingSeek = nil; self.seek(next); return }
+                if let next = self.pendingSeek { self.pendingSeek = nil; self.seek(next, fast: self.pendingFast); return }
                 self.bridge?.emit("videoSeeked", ["t": self.now])
             }
         }

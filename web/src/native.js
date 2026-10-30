@@ -78,13 +78,15 @@ const Native = (() => {
     const el = document.createElement('div');
     el.className = 'native-video';
     const st = { src: '', t: 0, at: 0, rate: 0, paused: true, duration: NaN, w: 0, h: 0, seeking: false, error: null,
-                 volume: 1, muted: false, ready: 0, wantRate: 1, canReverse: false, loadId: 0 };
+                 volume: 1, muted: false, ready: 0, wantRate: 1, canReverse: false, canFastReverse: false, loadId: 0 };
+    const clampT = (v) => Math.max(0, isFinite(st.duration) ? Math.min(st.duration, +v || 0) : (+v || 0));
     const fire = (type) => el.dispatchEvent(new Event(type));
+    // Between the native time updates (30 a second) the position is estimated from the speed, but
+    // never more than 0.12 s ahead: if playback stalls (fast reverse on H.264 does), the playhead waits.
     const now = () => {
-      if (st.paused || st.seeking || !st.rate) return st.t;
-      let v = st.t + st.rate * (performance.now() - st.at) / 1000;
-      if (isFinite(st.duration)) v = Math.min(st.duration, v);
-      return Math.max(0, v);
+      if (st.paused || st.seeking || !st.rate) return clampT(st.t);
+      const dt = Math.min(0.12, (performance.now() - st.at) / 1000);
+      return clampT(st.t + st.rate * dt);
     };
     const def = (name, get, set) => Object.defineProperty(el, name, { get, set: set || (() => {}), configurable: true });
     def('currentTime', now, (v) => {
@@ -112,6 +114,13 @@ const Native = (() => {
     });
     def('controls', () => false);
     def('canPlayReverse', () => st.canReverse);
+    def('canPlayFastReverse', () => st.canFastReverse);
+    // Seek to the nearest earlier keyframe: quick, for shuttling (not frame-exact).
+    el.fastSeek = (v) => {
+      v = clampT(v); st.t = v; st.at = performance.now(); st.seeking = true;
+      post('videoSeek', { t: v, fast: true });
+      fire('seeking'); fire('timeupdate');
+    };
     def('playbackRate', () => st.wantRate, (v) => {
       v = +v || 1; st.wantRate = v;
       if (!st.paused) { st.t = now(); st.at = performance.now(); st.rate = v; post('videoRate', { rate: v }); }
@@ -141,7 +150,7 @@ const Native = (() => {
 
     on('videoMeta', (d) => {
       if (d.id !== st.loadId) return;
-      st.duration = d.duration; st.w = d.width; st.h = d.height; st.canReverse = !!d.canReverse; st.ready = 4;
+      st.duration = d.duration; st.w = d.width; st.h = d.height; st.canReverse = !!d.canReverse; st.canFastReverse = !!d.canFastReverse; st.ready = 4;
       fire('durationchange'); fire('loadedmetadata'); fire('loadeddata'); fire('canplay'); fire('canplaythrough');
     });
     on('videoError', (d) => {
@@ -151,16 +160,16 @@ const Native = (() => {
     });
     on('videoTime', (d) => {
       if (st.seeking) return;
-      st.t = d.t; st.at = performance.now();
+      st.t = clampT(d.t); st.at = performance.now();
       if (!st.paused) st.rate = d.rate || st.rate;
       fire('timeupdate');
     });
     on('videoSeeked', (d) => {
-      st.seeking = false; st.t = d.t; st.at = performance.now();
+      st.seeking = false; st.t = clampT(d.t); st.at = performance.now();
       fire('seeked'); fire('timeupdate');
     });
     on('videoState', (d) => {   // playback stopped or started on the native side (end of file, start reached in reverse …)
-      st.t = d.t; st.at = performance.now();
+      st.t = clampT(d.t); st.at = performance.now();
       if (d.paused && !st.paused) { st.paused = true; st.rate = 0; fire('pause'); if (d.ended) fire('ended'); }
       else if (!d.paused && st.paused) { st.paused = false; st.rate = d.rate || 1; fire('play'); fire('playing'); }
     });

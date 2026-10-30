@@ -103,7 +103,7 @@
 
   // ---------------------------------------------------------------- frames & timecode
   function fps() { return vmeta.fps || fpsOverride || docEffectiveFrameRate || 23.976; }
-  function currentFrame() { return video ? Math.floor(video.currentTime * fps() + 1e-4) : 0; }
+  function currentFrame() { return video ? Math.max(0, Math.floor(video.currentTime * fps() + 1e-4)) : 0; }
   function seekFrame(n) {
     if (!video) return;
     const d = tlDuration() || Infinity;
@@ -432,7 +432,7 @@
   // ---------------------------------------------------------------- speed: one scale for J / K / L
   // -6/-4/-2 = reverse, 0 = paused, 1 = normal, 2/4/6 = fast-forward (see stepSpeed).
   // Browsers can't play backwards, so reverse is done by seeking back in small steps (no sound).
-  let speed = 0, rwRaf = 0, rwLast = 0, ownPause = false;
+  let speed = 0, rwRaf = 0, rwLast = 0, rwPos = 0, ownPause = false;
   const speedBadge = document.getElementById('speedBadge');
   function showSpeed() {
     if (!speedBadge) return;
@@ -449,16 +449,23 @@
     speedBadge.style.right = 'auto'; speedBadge.style.left = Math.round(tr.right - br.left + 10) + 'px';
   }
   window.addEventListener('resize', placeSpeedBadge);
-  function stopReverse() { if (rwRaf) cancelAnimationFrame(rwRaf); rwRaf = 0; }
+  // Stepped reverse keeps its own steady position (seeks may land a little earlier, on a keyframe);
+  // stopping lands exactly on that position.
+  function stopReverse() {
+    if (!rwRaf) return false;
+    cancelAnimationFrame(rwRaf); rwRaf = 0;
+    return true;
+  }
   function reverseLoop(now) {
     if (!video || speed >= 0) { rwRaf = 0; return; }
     const dt = rwLast ? Math.min(0.25, (now - rwLast) / 1000) : 0;
-    if (!video.seeking && dt > 0) {
-      rwLast = now;
-      const t = Math.max(0, video.currentTime + speed * dt);
-      video.currentTime = t; forceRender(); keepInView(); tlDirty = true;
-      if (t <= 0) { setSpeed(0); return; }
-    } else if (!rwLast) rwLast = now;
+    rwLast = now;
+    rwPos = Math.max(0, rwPos + speed * dt);
+    if (!video.seeking) {
+      if (video.fastSeek && NATIVE) video.fastSeek(rwPos); else video.currentTime = rwPos;
+      forceRender(); keepInView(); tlDirty = true;
+    }
+    if (rwPos <= 0) { setSpeed(0); return; }
     rwRaf = requestAnimationFrame(reverseLoop);
   }
   const SPEEDS = [-6, -4, -2, 1, 2, 4, 6];   // pause (0) sits between -2 and 1
@@ -472,14 +479,14 @@
   function setSpeed(n) {
     if (!video) { speed = 0; showSpeed(); return; }
     speed = n;
-    stopReverse();
+    if (stopReverse()) video.currentTime = rwPos;   // leave stepped reverse exactly where it was
     if (speed > 0) { video.playbackRate = speed; if (video.paused) video.play().catch(() => {}); }
-    else if (speed < 0 && video.canPlayReverse) {   // the Mac app plays backwards for real (with sound)
+    else if (speed < 0 && video.canPlayReverse && (speed === -1 || video.canPlayFastReverse)) {   // the Mac app plays backwards for real (ProRes …)
       video.playbackRate = speed; if (video.paused) video.play().catch(() => {});
     } else {
       video.playbackRate = 1;
       if (!video.paused) { ownPause = true; video.pause(); }
-      if (speed < 0) { rwLast = 0; rwRaf = requestAnimationFrame(reverseLoop); }
+      if (speed < 0) { rwLast = 0; rwPos = video.currentTime; rwRaf = requestAnimationFrame(reverseLoop); }
     }
     showSpeed(); syncPlayIcon();
   }
@@ -492,7 +499,8 @@
   // Keep the scale in step when playback starts or stops some other way (end of video, code paths
   // that call play()/pause() directly).
   function onVideoPlay() {
-    if (speed === 0 || (speed < 0 && !video.canPlayReverse)) { stopReverse(); speed = 1; video.playbackRate = 1; showSpeed(); }
+    const nativeRev = speed < 0 && video.canPlayReverse && (speed === -1 || video.canPlayFastReverse);
+    if (speed === 0 || (speed < 0 && !nativeRev)) { stopReverse(); speed = 1; video.playbackRate = 1; showSpeed(); }
     syncPlayIcon();
   }
   function onVideoPause() {
