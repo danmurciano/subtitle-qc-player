@@ -388,6 +388,24 @@ function finish(r) {
 
 
 // ------------------------------------------------------------ cue-level checks (shared with the player)
+function countChecks(r) {
+  const list = r.cueList;
+  if (!list) return;
+  CueCheck.finalizeQcFlags(list);
+  const n = f => list.filter(f).length;
+  r.checks = {
+    cps: n(x => x.cpsOver),
+    chars: n(x => x.charLimitExceeded),
+    lines: n(x => x.lineCount >= CueCheck.LINE_COUNT_THRESHOLD),
+    overlap: n(x => x.overlap),
+    duration: n(x => (x.tooShort || x.tooLong) && !x.tooShortCritical),
+    critical: n(x => x.tooShortCritical),
+    odd: n(x => x.hasSuspiciousChars),
+    mixed: n(x => x.mixedAlign),
+    raised: n(x => x.placement && x.placement.v === 'raised'),
+    side: n(x => x.placement && (x.placement.h === 'left' || x.placement.h === 'right')),
+  };
+}
 const NAME_FPS = { '2398': 23.976, '23976': 23.976, '24': 24, '25': 25, '2997': 29.97, '29970': 29.97, '30': 30, '50': 50, '5994': 59.94, '60': 60 };
 function cueChecks(r, parsed, flag) {
   // Frame rate in the name vs. the rate the file declares.
@@ -414,15 +432,9 @@ function cueChecks(r, parsed, flag) {
   if (!list) return;
   CueCheck.finalizeDurationFlags(list);
   CueCheck.finalizeCharFlags(list);
-  const c = {
-    overlap: list.filter(x => x.overlap).length,
-    lines: list.filter(x => x.lineCount >= CueCheck.LINE_COUNT_THRESHOLD).length,
-    chars: list.filter(x => x.charLimitExceeded).length,
-    duration: list.filter(x => (x.tooShort || x.tooLong) && !x.tooShortCritical).length,
-    critical: list.filter(x => x.tooShortCritical).length,
-    odd: list.filter(x => x.hasSuspiciousChars).length,
-  };
-  r.checks = c;
+  r.cueList = list;                                   // kept so a change of CPS/CPL limit can re-count
+  countChecks(r);
+  const c = r.checks;
   if (c.critical) flag('warn', `${c.critical} very short cue${c.critical === 1 ? '' : 's'} with long lines`, `Under ${CueCheck.SHORT_DURATION_SECONDS}s with ${CueCheck.SHORT_DURATION_CRITICAL_CHARS}+ characters. Open in the player and use the “Critical” filter.`);
   if (c.odd) flag('warn', `${c.odd} cue${c.odd === 1 ? '' : 's'} with invisible/odd characters`, 'Zero-width, control or replacement characters. Use the “Odd Chars” filter in the player.');
 }

@@ -211,16 +211,24 @@ ${ps.join('\n')}
     return { captions, nominal, drop };
   }
 
+  // Where a caption sits on the 32 x 15 caption grid. Lines that are each centred count as centred, and
+  // so does a left-justified block whose middle is near the centre (both are normal in SCC). Lines that
+  // don't share an alignment (e.g. a dash line pushed to the left under centred text) are "mixed".
   function placement(snap) {
     const top = snap[0].row, bottom = snap[snap.length - 1].row;
     const valign = bottom >= 14 ? 'bottom' : top <= 4 ? 'top' : 'raised';
-    const centres = snap.map(l => l.col + l.cells.length / 2);
-    const lefts = snap.map(l => l.col), rights = snap.map(l => l.col + l.cells.length);
-    let halign = 'center';
-    const avg = centres.reduce((a, b) => a + b, 0) / centres.length;
-    if (Math.abs(avg - 16) > 4) halign = avg < 16 ? 'left' : 'right';
-    if (snap.length > 1 && Math.max(...lefts) - Math.min(...lefts) <= 0 && Math.min(...lefts) <= 6) halign = 'left';
-    if (snap.length > 1 && Math.max(...rights) - Math.min(...rights) <= 0 && Math.min(...rights) >= 26) halign = 'right';
+    const near = (v, c, tol) => Math.abs(v - c) <= tol;
+    const lefts = snap.map(l => l.col), rights = snap.map(l => l.col + l.cells.length), centres = snap.map(l => l.col + l.cells.length / 2);
+    const side = c => near(c, 16, 3) ? 'center' : c < 16 ? 'left' : 'right';
+    let halign;
+    if (centres.every(c => near(c, 16, 2))) halign = 'center';
+    else if (snap.length === 1) halign = side(centres[0]);
+    else if (Math.max(...lefts) === Math.min(...lefts)) halign = side((Math.min(...lefts) + Math.max(...rights)) / 2);
+    else if (Math.max(...rights) === Math.min(...rights)) halign = side((Math.min(...lefts) + Math.max(...rights)) / 2);
+    else {
+      const each = centres.map(side);
+      halign = each.every(x => x === each[0]) ? each[0] : 'mixed';
+    }
     return { valign, halign };
   }
 

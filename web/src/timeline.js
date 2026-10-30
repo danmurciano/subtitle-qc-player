@@ -296,8 +296,11 @@
       const x0 = Math.round(x(b)) + 0.5, x1 = Math.max(x0 + 1, Math.round(x(e)) - 0.5);
       const tNow = video ? video.currentTime : 0;
       const hi = isMoving() ? (tNow >= b && tNow < e) : i === tlSelected;
-      ctx.fillStyle = `rgba(255,255,255,${hi ? 0.42 : 0.25})`;
+      // neutral events stay white; rule breaks are tinted red, unusual placement violet
+      const kind = cueKind(c), rgb = kind === 'issue' ? '255,92,92' : kind === 'place' ? '178,140,255' : '255,255,255';
+      ctx.fillStyle = `rgba(${rgb},${kind ? (hi ? 0.55 : 0.36) : (hi ? 0.42 : 0.25)})`;
       ctx.fillRect(x0, RULER + 1, x1 - x0, h - RULER - 2);
+      if (kind) { ctx.fillStyle = `rgb(${rgb})`; ctx.fillRect(x0, RULER + 1, x1 - x0, 3); }
     });
     // waveform: RMS solid, peak faint
     if (wf.peaks) {
@@ -631,9 +634,19 @@
   // or search narrows what you step through). Jumps the playhead to the event's first frame.
   function stepEvent(dir) {
     if (!video || !cueList.length) return;
-    const rows = [...cueListContainer.querySelectorAll('.cue-item')].filter(r => r.offsetParent !== null);
+    const rows = [...cueListContainer.querySelectorAll('.cue-item')].filter(r => r.style.display !== 'none');
     const idx = rows.map(r => Number(r.dataset.index)).filter(i => cueList[i] && isFinite(cueList[i].begin));
     if (!idx.length) return;
+    // Events table sorted by something other than time: ↑/↓ follow the table's row order.
+    if (eventsMode && !(evSort.key === 'begin' && evSort.dir > 0)) {
+      const order = [...evBody.rows].filter(r => !r.hidden).map(r => Number(r.dataset.index));
+      const pos = order.indexOf(tlSelected), n = pos < 0 ? (dir > 0 ? 0 : order.length - 1) : pos + dir;
+      if (n < 0 || n >= order.length) return;
+      seekFrame(Math.round((cueList[order[n]].begin - effectiveOffset()) * fps()));
+      selectCue(order[n], { seek: false, scrollList: true });
+      if (evRows[order[n]]) evRows[order[n]].scrollIntoView({ block: 'nearest' });
+      return;
+    }
     const half = 0.5 / fps(), t = video.currentTime + effectiveOffset();
     // The current event is the one at (or last passed by) the playhead; ↑ goes to the one before it,
     // ↓ to the one after, like moving a cursor through the list. Works the same while playing.
@@ -646,7 +659,8 @@
     const target = idx[n];
     if (target < 0) return;
     seekFrame(Math.round((cueList[target].begin - effectiveOffset()) * fps()));
-    selectCue(target, { seek: false, scrollList: true });
+    selectCue(target, { seek: false, scrollList: !eventsMode });
+    if (eventsMode && evRows[target]) evRows[target].scrollIntoView({ block: 'nearest' });
   }
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
@@ -672,6 +686,17 @@
     left.style.height = (avail + BOTTOM_PAD) + 'px'; side.style.height = (avail + BOTTOM_PAD) + 'px';
     const tl = document.getElementById('timeline');
     const tlH = tl.offsetHeight;
+    if (eventsMode) {
+      // Events tab: table on the left, a smaller player (16:9) with its bar and the event details on the right.
+      const total = qcGrid.clientWidth, colH = avail + BOTTOM_PAD;
+      const RW = Math.round(Math.min(640, Math.max(420, total * 0.36)));
+      qcGrid.style.gridTemplateColumns = `minmax(0,1fr) ${RW}px`;
+      evPane.style.height = colH + 'px';
+      stage.parentElement.style.height = colH + 'px';
+      fitStage(Math.min(Math.round(RW * 9 / 16), Math.max(160, avail - tlH - 120)));
+      return;
+    }
+    stage.parentElement.style.height = '';
     const stageH = avail - tlH;
     // Left column keeps its width. The right column grows only when the window is wide enough that
     // the player would otherwise have grey space at its sides, so the player stays exactly 16:9.
@@ -682,11 +707,15 @@
     const spare = total - LEFT_W - RIGHT_MIN - want;
     if (window.innerWidth >= 1100 && spare > 0 && spare <= 48) rw = RIGHT_MIN + spare;
         qcGrid.style.gridTemplateColumns = window.innerWidth >= 1100 ? `${LEFT_W}px minmax(0,1fr) ${rw}px` : '';
-    stage.style.height = stageH + 'px';
     const vp = document.querySelector('.qcleft .vpanel'), sp = document.querySelector('.qcleft .spanel');
     const GUTTER = 6, colH = avail + BOTTOM_PAD;
     const vH = Math.round((colH - GUTTER) / 2);
     vp.style.height = vH + 'px'; sp.style.height = (colH - GUTTER - vH) + 'px';
+    fitStage(stageH);
+  }
+  // The black video area is stageH tall; the picture is the largest that fits, centred.
+  function fitStage(stageH) {
+    stage.style.height = stageH + 'px';
     const ph = document.getElementById('placeholder');
     if (ph && ph.isConnected) {
       // No video yet: an empty 16:9 black player, centred, like a loaded video would be.

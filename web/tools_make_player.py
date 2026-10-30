@@ -79,14 +79,15 @@ rep("""    if (!video) return;
 # replace the two file-input listeners with an API
 start=js.index("  videoInput.addEventListener('change', () => {")
 end=js.index("  // --- Keyboard shortcuts")
-js=js[:start]+open('src/player_api.js').read()+'\n'+open('src/timeline.js').read()+'\n'+js[end:]
+js=js[:start]+open('src/cueinfo.js').read()+'\n'+open('src/player_api.js').read()+'\n'+open('src/events.js').read()+'\n'+open('src/timeline.js').read()+'\n'+js[end:]
 # export shared checks for the QC tab
 js=js.rstrip()
 assert js.endswith('})();')
 js=js[:-5]+"""
   window.CueCheck = {
-    parse: parseRawCueList, finalizeDurationFlags, finalizeCharFlags,
-    LINE_COUNT_THRESHOLD, CHAR_LIMIT, SHORT_DURATION_SECONDS, SHORT_DURATION_CRITICAL_CHARS, MAX_DURATION_SECONDS
+    parse: parseRawCueList, finalizeDurationFlags, finalizeCharFlags, finalizeQcFlags, setLimits,
+    get CHAR_LIMIT() { return CHAR_LIMIT; }, get CPS_LIMIT() { return CPS_LIMIT; },
+    LINE_COUNT_THRESHOLD, SHORT_DURATION_SECONDS, SHORT_DURATION_CRITICAL_CHARS, MAX_DURATION_SECONDS
   };
 })();
 """
@@ -114,6 +115,68 @@ rep("""  function formatRange(begin, end) {
     const b = formatVideoTC(begin);
     return isFinite(end) ? `${b} - ${formatVideoTC(end)}` : `${b} - …`;
   }""")
+
+
+# ---- per-event QC info (cueinfo.js): CPS, placement, issue tags, limits
+rep("""  const CHAR_LIMIT = 42;""", """  let CHAR_LIMIT = 42;""")
+rep("""        results.push({
+          begin, end,
+          region: region || '(default)',""", """        results.push({
+          begin, end,
+          chars: perLineLen.reduce((a, b) => a + b, 0),
+          placement: placementOf(el, region, root, resolveStyleAttr, lines.length),
+          region: region || '(default)',""")
+rep("""    finalizeDurationFlags(cueList);
+    finalizeCharFlags(cueList);
+""", """    finalizeDurationFlags(cueList);
+    finalizeCharFlags(cueList);
+    finalizeQcFlags(cueList);
+""")
+rep("""      row.className = 'cue-item' + (cue.overlap ? ' overlap' : '');""", """      row.className = 'cue-item' + (cueKind(cue) ? ' has-' + cueKind(cue) : '');""")
+a = js.index("      if (cue.showRegionTag) {")
+b = js.index("      const textEl = document.createElement('span');\n      textEl.className = 'cue-text';")
+js = js[:a] + "      appendCueTags(timeEl, cue);\n\n" + js[b:]
+# filter chips: hide the ones with nothing to show (except All / Issues / the active one)
+rep("""      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'filter-chip'""", """      if (!count && !f.always && f.key !== currentFilter) return;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'filter-chip'""")
+
+
+# ---- Events tab hooks (events.js): the table follows the event list's filter, selection and playhead
+rep("""    filterEmptyMsg.style.display = (visibleCount === 0 && cueList.length > 0) ? 'block' : 'none';
+  }""", """    filterEmptyMsg.style.display = (visibleCount === 0 && cueList.length > 0) ? 'block' : 'none';
+    evApplyFilter();
+  }""")
+rep("""    cueListContainer.appendChild(frag);
+    reapplyTlSel();
+    applyFilterVisibility();
+  }""", """    cueListContainer.appendChild(frag);
+    reapplyTlSel();
+    applyFilterVisibility();
+    evMarkDirty();
+  }""")
+rep("""    const row = cueListContainer.children[tlSelected];
+    if (row) row.classList.add('tl-sel');
+    return row;""", """    const row = cueListContainer.children[tlSelected];
+    if (row) row.classList.add('tl-sel');
+    evSyncSel();
+    return row;""")
+rep("""    if (firstEl) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }""", """    if (firstEl && !eventsMode) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    evSyncActive();
+  }""")
+
+rep("""      filterEmptyMsg.style.display = 'none';
+      return;
+    }
+    sidebarEmpty.style.display = 'none';""", """      filterEmptyMsg.style.display = 'none';
+      evMarkDirty();
+      return;
+    }
+    sidebarEmpty.style.display = 'none';""")
 
 open('src/player.js','w').write(js)
 print('ok', len(js))
