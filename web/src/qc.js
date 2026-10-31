@@ -402,6 +402,7 @@ function countChecks(r) {
     critical: n(x => x.tooShortCritical),
     odd: n(x => x.hasSuspiciousChars),
     mixed: n(x => x.mixedAlign),
+    gaps: n(x => x.gapWarn),
     raised: n(x => x.placement && x.placement.v === 'raised'),
     side: n(x => x.placement && (x.placement.h === 'left' || x.placement.h === 'right')),
   };

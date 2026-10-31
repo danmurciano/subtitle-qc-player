@@ -1,35 +1,54 @@
-  // ================================================================ Events tab
-  // A full table of the loaded subtitle's events next to a smaller copy of the player. It is the same
-  // player as the QC tab (same video, subtitle, playhead, selection, filters and search): the page
-  // just rearranges itself, so switching tabs never loses state.
-  const evPane = document.getElementById('evPane');
+  // ================================================================ event panel: expanded table
+  // The event list on the right of the QC tab can expand to about half the window and show every event
+  // as a table. Same filters, search, selection and playhead as the list: only the presentation changes.
+  // The left file panel narrows to 220 px while expanded; the player shrinks in between.
   const evTable = document.getElementById('evTable');
   const evBody = evTable ? evTable.tBodies[0] : null;
   const evWrap = document.getElementById('evWrap');
-  const evTools = document.getElementById('evTools');
-  const evDetail = document.getElementById('evDetail');
   const evCount = document.getElementById('evCount');
-  const sidebarEl = document.getElementById('sidebar');
-  const stickyEl = document.querySelector('#sidebar .sidebar-sticky');
-  let eventsMode = false, evDirty = true, evRows = [], evDetailIdx = -2;
+  const expandBtn = document.getElementById('expandEvents');
+  const EXPANDED_KEY = 'qc:eventsExpanded';
+  let expanded = false, evDirty = true, evRows = [];
+  let expandT = 0, expandAnim = 0;                 // 0 = collapsed, 1 = expanded (animated in between)
   const evSort = { key: 'begin', dir: 1 };
 
+  const placeRank = p => !p ? 0 : (p.h === 'mixed' ? 4 : 0) + (p.v === 'raised' ? 2 + (p.lift || 0) / 100 : 0) + (p.h === 'left' || p.h === 'right' ? 1 : 0) + (p.v === 'top' ? 0.5 : 0);
   const EV_SORT = {
-    begin: c => c.begin, end: c => c.end, duration: c => c.duration ?? -1, lines: c => c.lineCount,
-    cpl: c => c.maxLineLength, cps: c => c.cps ?? -1, h: c => (c.placement ? c.placement.h : ''),
-    v: c => (c.placement ? (c.placement.v === 'raised' ? 'raised' + String(999 - (c.placement.lift || 0)).padStart(3, '0') : c.placement.v) : ''),
-    gap: c => (c.gap == null ? Infinity : c.gap), issues: c => -(c.issues ? c.issues.length : 0),
+    begin: c => c.begin, duration: c => c.duration ?? -1,
+    cpl: c => c.maxLineLength * 10 + c.lineCount, cps: c => c.cps ?? -1, place: c => placeRank(c.placement),
   };
 
-  function gapText(g) {
-    if (g == null) return '';
-    const f = Math.round(g * fps());
-    if (Math.abs(f) < 100) return `${f}f`;
-    if (Math.abs(g) < 60) return `${g.toFixed(1)}s`;
-    const m = Math.floor(Math.abs(g) / 60), sec = Math.round(Math.abs(g) % 60);
-    return `${g < 0 ? '-' : ''}${m}m ${String(sec).padStart(2, '0')}s`;
+  // Duration as trimmed seconds:frames (2:13), with minutes when needed (1:05:12).
+  function durText(d) {
+    if (d == null || !isFinite(d)) return '';
+    const nom = Math.round(fps() || docEffectiveFrameRate || 24);
+    const f = Math.round(d * (fps() || docEffectiveFrameRate || 24));
+    const ff = String(f % nom).padStart(2, '0'), s = Math.floor(f / nom);
+    return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}:${ff}` : `${s}:${ff}`;
   }
-  const td = (cls, text, title) => { const el = document.createElement('td'); if (cls) el.className = cls; if (text != null) el.textContent = text; if (title) el.title = title; return el; };
+  // Placement text: empty for the usual bottom-centre.
+  function placeText(p) {
+    if (!p) return ['', ''];
+    if (p.h === 'mixed') return ['Mixed' + (p.v === 'raised' ? ` · Raised${p.lift != null ? ' ' + p.lift + '%' : ''}` : p.v === 'top' ? ' · Top' : ''), 'bad'];
+    const parts = [];
+    if (p.h === 'left' || p.h === 'right') parts.push(hText(p.h));
+    if (p.v === 'raised') parts.push(`Raised${p.lift != null ? ' ' + p.lift + '%' : ''}`);
+    if (p.v === 'top') parts.push('Top');
+    if (p.v === 'vertical') parts.push('Vertical');
+    const unusual = p.v === 'raised' || p.h === 'left' || p.h === 'right';
+    return [parts.join(' · '), unusual ? 'place' : parts.length ? 'neutral' : ''];
+  }
+  // Hover text for a row: characters per line, then every flag in words.
+  function rowTitle(c) {
+    const lines = c.text.split('\n').map((l, k) => `Line ${k + 1}: ${Array.from(l).length} characters`);
+    const out = [...lines, `On screen ${c.duration != null ? c.duration.toFixed(3) + ' s' : '—'} · ${c.chars} characters · ${c.cps != null ? c.cps.toFixed(1) + ' CPS' : ''}`];
+    const flags = [...(c.issues || []), ...(c.warns || []), ...(c.placeTags || [])].map(t => '• ' + t.title);
+    if (c.overlapsPrev) flags.unshift('• Starts before the previous event ends');
+    if (c.overlapsNext) flags.unshift('• Ends after the next event starts');
+    return flags.length ? out.concat('', flags.filter((t, k, a) => a.indexOf(t) === k)).join('\n') : out.join('\n');
+  }
+  const cell = (cls, text) => { const el = document.createElement('td'); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; };
+  const span = (cls, text) => { const el = document.createElement('span'); if (cls) el.className = cls; el.textContent = text; return el; };
 
   function renderEventsTable() {
     if (!evBody) return;
@@ -42,23 +61,26 @@
       tr.dataset.index = String(i);
       const kind = cueKind(c);
       if (kind) tr.className = 'has-' + kind;
-      const p = c.placement;
-      tr.appendChild(td('ev-n', String(i + 1)));
-      tr.appendChild(td('ev-tc', formatVideoTC(c.begin)));
-      tr.appendChild(td('ev-tc', isFinite(c.end) ? formatVideoTC(c.end) : '…'));
-      tr.appendChild(td('ev-num' + (c.tooShort || c.tooLong ? ' bad' : ''), c.duration != null ? c.duration.toFixed(2) : ''));
-      const t = td('ev-text');
+      tr.title = rowTitle(c);
+      tr.appendChild(cell('ev-n', String(i + 1)));
+      const io = cell('ev-io');
+      io.appendChild(span(c.overlapsPrev ? 'bad' : '', formatVideoTC(c.begin)));
+      io.appendChild(span(c.overlapsNext ? 'bad' : c.gapWarn ? 'warn' : '', isFinite(c.end) ? formatVideoTC(c.end) : '…'));
+      tr.appendChild(io);
+      const dur = cell('ev-num');
+      dur.appendChild(span(c.tooShortCritical ? 'crit' : (c.tooShort || c.tooLong) ? 'bad' : '', durText(c.duration)));
+      tr.appendChild(dur);
+      const t = cell('ev-text');
       renderCueText(t, c.text, searchQuery, searchCaseSensitive);
       tr.appendChild(t);
-      tr.appendChild(td('ev-num' + (c.lineCount >= LINE_COUNT_THRESHOLD ? ' bad' : ''), String(c.lineCount)));
-      tr.appendChild(td('ev-num' + (c.charLimitExceeded ? ' bad' : ''), String(c.maxLineLength)));
-      tr.appendChild(td('ev-num' + (c.cpsOver ? ' bad' : ''), c.cps != null ? c.cps.toFixed(1) : ''));
-      tr.appendChild(td('ev-pl' + (p && p.h === 'mixed' ? ' bad' : p && (p.h === 'left' || p.h === 'right') ? ' place' : ''), p ? hText(p.h) : '—'));
-      tr.appendChild(td('ev-pl' + (p && p.v === 'raised' ? ' place' : p && p.v === 'top' ? ' neutral' : ''), vText(p)));
-      tr.appendChild(td('ev-num' + (c.gap != null && c.gap < -0.001 ? ' bad' : ''), gapText(c.gap)));
-      const iss = td('ev-iss');
-      for (const x of c.issues || []) { const s = document.createElement('span'); s.className = 'qtag q-issue'; s.textContent = x.text; s.title = x.title; iss.appendChild(s); }
-      tr.appendChild(iss);
+      const lc = cell('ev-num');
+      lc.appendChild(span(c.lineCount >= LINE_COUNT_THRESHOLD ? 'bad' : '', String(c.lineCount)));
+      lc.appendChild(span('ev-sep', '·'));
+      lc.appendChild(span(c.charLimitExceeded ? 'bad' : '', String(c.maxLineLength)));
+      tr.appendChild(lc);
+      tr.appendChild(cell('ev-num' + (c.cpsOver ? ' bad' : ''), c.cps != null ? c.cps.toFixed(1) : ''));
+      const [pt, pc] = placeText(c.placement);
+      tr.appendChild(cell(pc, pt));
       evRows[i] = tr;
       frag.appendChild(tr);
     });
@@ -84,48 +106,46 @@
   function updateSortHeads() {
     if (!evTable) return;
     evTable.querySelectorAll('th[data-sort]').forEach(th => {
-      th.classList.toggle('sorted', th.dataset.sort === evSort.key);
-      th.dataset.dir = th.dataset.sort === evSort.key ? (evSort.dir > 0 ? '▲' : '▼') : '';
+      const on = th.dataset.sort === evSort.key && !(evSort.key === 'begin' && th.cellIndex === 0);
+      th.classList.toggle('sorted', on);
+      th.dataset.dir = on ? (evSort.dir > 0 ? '▲' : '▼') : '';
     });
   }
   if (evTable) evTable.tHead.addEventListener('click', e => {
     const th = e.target.closest('th[data-sort]');
     if (!th) return;
-    // First click: time-like columns ascending, measures worst first ("issues" is already negated).
+    // First click: time ascending, measures worst first. Again reverses.
     if (evSort.key === th.dataset.sort) evSort.dir = -evSort.dir;
-    else { evSort.key = th.dataset.sort; evSort.dir = ['cps', 'cpl', 'lines', 'duration'].includes(th.dataset.sort) ? -1 : 1; }
+    else { evSort.key = th.dataset.sort; evSort.dir = th.dataset.sort === 'begin' ? 1 : -1; }
     sortEvents(); updateSortHeads();
     const sel = evRows[tlSelected];
     if (sel) sel.scrollIntoView({ block: 'nearest' });
   });
 
-  // Same filter + search as the event list.
+  // Same filter + search as the list.
   function evApplyFilter() {
-    if (!evRows.length) { if (evCount) evCount.textContent = ''; return; }
     const f = FILTERS.find(x => x.key === currentFilter) || FILTERS[0];
     let n = 0;
-    cueList.forEach((c, i) => { const show = f.test(c) && cueMatchesSearch(c); evRows[i].hidden = !show; if (show) n++; });
-    if (evCount) evCount.textContent = n === cueList.length ? `${n} events` : `${n} of ${cueList.length} events`;
+    cueList.forEach((c, i) => { const show = f.test(c) && cueMatchesSearch(c); if (evRows[i]) evRows[i].hidden = !show; if (show) n++; });
+    if (evCount) evCount.textContent = !cueList.length ? '' : n === cueList.length ? `· ${n}` : `· ${n} of ${cueList.length}`;
   }
   function evSyncSel() {
-    if (!evRows.length) { updateEvDetail(); return; }
+    if (!evRows.length) return;
     for (const r of evBody.querySelectorAll('tr.sel')) r.classList.remove('sel');
     const r = evRows[tlSelected];
     if (r) r.classList.add('sel');
-    updateEvDetail();
   }
   function evSyncActive() {
     if (!evRows.length) return;
     for (const r of evBody.querySelectorAll('tr.active')) r.classList.remove('active');
     let first = null;
     activeCueIndices.forEach(i => { const r = evRows[i]; if (r) { r.classList.add('active'); if (!first) first = r; } });
-    if (first && eventsMode && isMoving()) {
+    if (first && expanded && isMoving()) {
       const wr = evWrap.getBoundingClientRect(), rr = first.getBoundingClientRect();
       if (rr.top < wr.top + 28 || rr.bottom > wr.bottom) first.scrollIntoView({ block: 'nearest' });
     }
-    updateEvDetail();
   }
-  function evMarkDirty() { evDirty = true; evDetailIdx = -2; if (eventsMode) renderEventsTable(); else updateEvDetail(); }
+  function evMarkDirty() { evDirty = true; if (expanded) renderEventsTable(); }
 
   if (evBody) evBody.addEventListener('click', e => {
     const tr = e.target.closest('tr');
@@ -133,51 +153,7 @@
     selectCue(Number(tr.dataset.index), { seek: true, scrollList: false });
   });
 
-  // The selected event (or the one playing) in detail, under the player.
-  function updateEvDetail() {
-    if (!evDetail) return;
-    let i = tlSelected;
-    if ((isMoving() || i < 0) && activeCueIndices.size) i = [...activeCueIndices][0];
-    if (i === evDetailIdx && !evDirty) return;
-    evDetailIdx = i;
-    const c = cueList[i];
-    evDetail.textContent = '';
-    if (!c) { evDetail.innerHTML = `<div class="evd-empty">${cueList.length ? 'Click an event to see it here.' : 'Open a subtitle file to see its events.'}</div>`; return; }
-    const head = document.createElement('div');
-    head.className = 'evd-head';
-    head.textContent = `#${i + 1}  ·  ${formatVideoTC(c.begin)} – ${isFinite(c.end) ? formatVideoTC(c.end) : '…'}  ·  ${c.duration != null ? c.duration.toFixed(3) + 's' : ''}`;
-    evDetail.appendChild(head);
-    const lines = document.createElement('div');
-    lines.className = 'evd-lines';
-    for (const l of c.text.split('\n')) {
-      const row = document.createElement('div');
-      const n = Array.from(l.replace(/^\(.*\)$/, '')).length;
-      const tx = document.createElement('span'); tx.className = 'evd-t'; renderCueText(tx, l, '', false);
-      const ct = document.createElement('span'); ct.className = 'evd-n' + (n > CHAR_LIMIT ? ' bad' : ''); ct.textContent = n;
-      ct.title = 'Characters on this line';
-      row.appendChild(tx); row.appendChild(ct);
-      lines.appendChild(row);
-    }
-    evDetail.appendChild(lines);
-    const p = c.placement;
-    const meta = document.createElement('div');
-    meta.className = 'evd-meta';
-    const item = (k, v, cls) => { const s = document.createElement('span'); s.innerHTML = `<i>${k}</i> `; const b = document.createElement('b'); b.textContent = v; if (cls) b.className = cls; s.appendChild(b); meta.appendChild(s); };
-    item('CPS', c.cps != null ? c.cps.toFixed(1) : '—', c.cpsOver ? 'bad' : '');
-    item('Chars', String(c.chars));
-    item('Lines', String(c.lineCount), c.lineCount >= LINE_COUNT_THRESHOLD ? 'bad' : '');
-    item('Position', p ? `${hText(p.h)} · ${vText(p)}` : '—', p && p.h === 'mixed' ? 'bad' : p && (p.v === 'raised' || p.h === 'left' || p.h === 'right') ? 'place' : '');
-    item('Gap after', c.gap != null ? gapText(c.gap) : '—', c.gap != null && c.gap < -0.001 ? 'bad' : '');
-    evDetail.appendChild(meta);
-    if ((c.issues || []).length || (c.placeTags || []).length) {
-      const tags = document.createElement('div');
-      tags.className = 'evd-tags';
-      appendCueTags(tags, c);
-      evDetail.appendChild(tags);
-    }
-  }
-
-  // Limits (shared with the event list and the Conform page).
+  // Limits (shared with the list and the Conform page). Shown in the panel header while expanded.
   const limCps = document.getElementById('limCps'), limCpl = document.getElementById('limCpl');
   function showLimits() { if (limCps) limCps.value = CPS_LIMIT; if (limCpl) limCpl.value = CHAR_LIMIT; }
   showLimits();
@@ -189,17 +165,47 @@
   });
   document.addEventListener('qc-limits', () => { showLimits(); renderFilterBar(); applyFilterVisibility(); });
 
-  function setEventsMode(on) {
-    if (on === eventsMode) { if (on && evDirty) renderEventsTable(); return; }
-    eventsMode = on;
-    // The search box and filters live in whichever view is showing.
-    if (stickyEl) { if (on) evTools.appendChild(stickyEl); else sidebarEl.insertBefore(stickyEl, sidebarEl.firstChild); }
+  // ---------------------------------------------------------------- expand / collapse
+  const ICON_EXPAND = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4L3 8l4 4M3 8h10"/></svg>';
+  const ICON_COLLAPSE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4l4 4-4 4M13 8H3"/></svg>';
+  function showExpandBtn() {
+    if (!expandBtn) return;
+    expandBtn.innerHTML = expanded ? ICON_COLLAPSE : ICON_EXPAND;
+    expandBtn.title = expanded ? 'Back to the event list (E)' : 'Show all details in a table (E)';
+  }
+  function setExpanded(on, { animate = true } = {}) {
+    on = !!on;
+    if (on === expanded) return;
+    expanded = on;
+    Store.set(EXPANDED_KEY, on ? '1' : '0');
+    document.body.classList.toggle('ev-expanded', on);
+    showExpandBtn();
     if (on && evDirty) renderEventsTable();
     else if (on) { evSyncSel(); evSyncActive(); }
-    layoutQC();
-    if (on) { const r = evRows[tlSelected] || evRows[[...activeCueIndices][0]]; if (r) r.scrollIntoView({ block: 'center' }); }
-    else { const r = cueListContainer.children[tlSelected]; if (r) r.scrollIntoView({ block: 'center' }); }
+    cancelAnimationFrame(expandAnim);
+    const from = expandT, to = on ? 1 : 0, t0 = performance.now(), MS = animate && document.body.dataset.tab === 'player' ? 200 : 0;
+    const step = now => {
+      const k = MS ? Math.min(1, (now - t0) / MS) : 1;
+      expandT = from + (to - from) * (1 - Math.pow(1 - k, 3));     // ease-out
+      layoutQC();
+      if (k < 1) expandAnim = requestAnimationFrame(step);
+      else {
+        const r = on ? (evRows[tlSelected] || evRows[[...activeCueIndices][0]]) : cueListContainer.children[tlSelected];
+        if (r) r.scrollIntoView({ block: 'center' });
+      }
+    };
+    expandAnim = requestAnimationFrame(step);
   }
-  window.Player.setEventsMode = setEventsMode;
+  if (expandBtn) expandBtn.addEventListener('click', () => setExpanded(!expanded));
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'e' && e.key !== 'E') return;
+    if (document.body.dataset.tab !== 'player' || isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.target && e.target.tagName === 'SELECT') return;
+    e.preventDefault();
+    setExpanded(!expanded);
+  });
+  showExpandBtn();
+  if (Store.get(EXPANDED_KEY) === '1') { expanded = true; expandT = 1; document.body.classList.add('ev-expanded'); showExpandBtn(); }
+
   window.Player.pause = () => { setSpeed(0); if (video && !video.paused) video.pause(); };
   window.Player.setLimits = setLimits;

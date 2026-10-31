@@ -1,7 +1,8 @@
   // ================================================================ per-event QC info
   // Reading speed (CPS), placement (left / right / raised / top) and the issue list for each event.
   // Shared by the event list, the waveform, the Events table and the Conform page.
-  // Colour scheme: red = a rule is broken, violet = unusual placement, grey = top (neutral).
+  // Colour scheme: red = a rule is broken, amber = a warning (1-frame gap), violet = unusual placement,
+// grey = top (neutral).
 
   const QC_LIMITS_KEY = 'qc:limits';
   let CPS_LIMIT = 20;
@@ -109,8 +110,20 @@
       c.charLimitExceeded = c.maxLineLength > CHAR_LIMIT;
       const nx = list[i + 1];
       c.gap = nx && isFinite(c.end) ? nx.begin - c.end : null;
+      // A gap of a single frame makes the subtitle blink off and on. 0 (back-to-back) is normal.
+      const frame = 1 / (fps() || docEffectiveFrameRate || 24);
+      c.gapWarn = c.gap != null && c.gap > 0.001 && c.gap < frame * 1.5;
+      c.gapNext = c.gapWarn ? i + 2 : null;
       c.mixedAlign = !!(c.placement && c.placement.h === 'mixed');
     });
+    // Which side of an event collides: its start (with an earlier event) and/or its end (with a later one).
+    let runEnd = -Infinity;
+    list.forEach(c => { c.overlapsPrev = c.begin < runEnd - 0.001; if (c.end > runEnd) runEnd = c.end; });
+    for (let i = 0; i < list.length; i++) {
+      const c = list[i];
+      c.overlapsNext = false;
+      for (let j = i + 1; j < list.length && list[j].begin < c.end - 0.001; j++) { c.overlapsNext = true; break; }
+    }
     // Two events shown together with different alignment (e.g. a dash line in its own block).
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length && list[j].begin < list[i].begin + 0.001; j++) {
@@ -118,7 +131,7 @@
         if (Math.abs(a.end - b.end) < 0.001 && a.placement && b.placement && a.placement.h !== b.placement.h) a.mixedAlign = b.mixedAlign = true;
       }
     }
-    list.forEach(c => { c.issues = cueIssues(c); c.placeTags = cuePlaceTags(c); });
+    list.forEach(c => { c.issues = cueIssues(c); c.warns = cueWarns(c); c.placeTags = cuePlaceTags(c); });
   }
   const secs = v => v < 10 ? v.toFixed(2).replace(/0$/, '') : v.toFixed(1);
   function cueIssues(c) {
@@ -135,6 +148,10 @@
     if (c.mixedAlign) add('mixed', 'Mixed align', 'Lines of this event are aligned differently');
     return out;
   }
+  function cueWarns(c) {
+    if (!c.gapWarn) return [];
+    return [{ key: 'gap', text: 'Gap 1f', title: `1-frame gap before the next event (#${c.gapNext}): the subtitle blinks off for a single frame`, kind: 'warn' }];
+  }
   function cuePlaceTags(c) {
     const p = c.placement, out = [];
     if (!p) return out;
@@ -144,9 +161,9 @@
     if (p.v === 'vertical') out.push({ key: 'vertical', text: 'Vertical', title: 'Vertical text', kind: 'neutral' });
     return out;
   }
-  const cueKind = c => (c.issues && c.issues.length) ? 'issue' : (c.placeTags && c.placeTags.some(t => t.kind === 'place')) ? 'place' : '';
+  const cueKind = c => (c.issues && c.issues.length) ? 'issue' : (c.warns && c.warns.length) ? 'warn' : (c.placeTags && c.placeTags.some(t => t.kind === 'place')) ? 'place' : '';
   function appendCueTags(el, cue) {
-    for (const t of [...(cue.issues || []), ...(cue.placeTags || [])]) {
+    for (const t of [...(cue.issues || []), ...(cue.warns || []), ...(cue.placeTags || [])]) {
       const s = document.createElement('span');
       s.className = 'qtag q-' + t.kind;
       s.textContent = t.text;
@@ -157,21 +174,21 @@
   const hText = h => ({ left: 'Left', right: 'Right', center: 'Centre', mixed: 'Mixed' })[h] || '—';
   const vText = p => !p ? '—' : p.v === 'raised' ? `Raised${p.lift != null ? ' ' + p.lift + '%' : ''}` : ({ bottom: 'Bottom', top: 'Top', vertical: 'Vertical' })[p.v] || '—';
 
-  // Filters for the event list and the Events table (same state for both).
+  // Filters for the event list and the table (one shared state). All are always shown, dimmed when empty.
   FILTERS.splice(0, FILTERS.length,
-    { key: 'all', label: 'All', cls: null, test: () => true, always: true },
-    { key: 'issues', label: 'Issues', cls: 'f-issue', test: c => !!(c.issues && c.issues.length), always: true },
-    { key: 'cps', get label() { return `CPS > ${CPS_LIMIT}`; }, cls: 'f-issue', test: c => !!c.cpsOver },
-    { key: 'chars', get label() { return `CPL > ${CHAR_LIMIT}`; }, cls: 'f-issue', test: c => !!c.charLimitExceeded },
+    { key: 'all', label: 'All', cls: null, test: () => true },
+    { key: 'issues', label: 'Issues', cls: 'f-issue', title: 'Every event with a red flag', test: c => !!(c.issues && c.issues.length) },
+    { key: 'cps', get label() { return `CPS > ${CPS_LIMIT}`; }, cls: 'f-issue', get title() { return `Over ${CPS_LIMIT} characters per second`; }, test: c => !!c.cpsOver },
+    { key: 'chars', get label() { return `CPL > ${CHAR_LIMIT}`; }, cls: 'f-issue', get title() { return `A line longer than ${CHAR_LIMIT} characters`; }, test: c => !!c.charLimitExceeded },
     { key: 'lines', label: '3+ Lines', cls: 'f-issue', test: c => c.lineCount >= LINE_COUNT_THRESHOLD },
     { key: 'overlap', label: 'Overlaps', cls: 'f-issue', test: c => !!c.overlap },
-    { key: 'duration', label: 'Duration', cls: 'f-issue', test: c => !!(c.tooShort || c.tooLong) },
-    { key: 'durationCritical', label: `Critical (<${SHORT_DURATION_SECONDS}s, ${SHORT_DURATION_CRITICAL_CHARS}+ chars)`, cls: 'f-issue', test: c => !!c.tooShortCritical },
-    { key: 'suspicious', label: 'Odd Chars', cls: 'f-issue', test: c => !!c.hasSuspiciousChars },
-    { key: 'mixed', label: 'Mixed align', cls: 'f-issue', test: c => !!c.mixedAlign },
-    { key: 'raised', label: 'Raised', cls: 'f-place', test: c => !!(c.placement && c.placement.v === 'raised') },
-    { key: 'side', label: 'Left/Right', cls: 'f-place', test: c => !!(c.placement && (c.placement.h === 'left' || c.placement.h === 'right')) },
-    { key: 'top', label: 'Top', cls: 'f-neutral', test: c => !!(c.placement && c.placement.v === 'top') },
+    { key: 'duration', label: 'Duration', cls: 'f-issue', title: `Under ${SHORT_DURATION_SECONDS}s or over ${MAX_DURATION_SECONDS}s on screen`, test: c => !!(c.tooShort || c.tooLong) },
+    { key: 'durationCritical', label: 'Critical', cls: 'f-issue', title: `Under ${SHORT_DURATION_SECONDS}s with a line of ${SHORT_DURATION_CRITICAL_CHARS}+ characters`, test: c => !!c.tooShortCritical },
+    { key: 'suspicious', label: 'Odd Chars', cls: 'f-issue', title: 'Invisible, control or replacement characters', test: c => !!c.hasSuspiciousChars },
+    { key: 'mixed', label: 'Mixed align', cls: 'f-issue', title: 'Lines of one event aligned differently', test: c => !!c.mixedAlign },
+    { key: 'gaps', label: 'Gaps', cls: 'f-warn', title: '1-frame gaps (the subtitle blinks off for a frame)', test: c => !!c.gapWarn },
+    { key: 'placement', label: 'Placement', cls: 'f-place', title: 'Raised, or left / right-aligned', test: c => !!(c.placement && (c.placement.v === 'raised' || c.placement.h === 'left' || c.placement.h === 'right')) },
+    { key: 'top', label: 'Top', cls: 'f-neutral', title: 'Placed at the top', test: c => !!(c.placement && c.placement.v === 'top') },
   );
 
   // Limits: changing them re-checks the loaded file at once (the Conform page re-counts too).

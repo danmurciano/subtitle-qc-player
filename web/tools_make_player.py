@@ -126,23 +126,18 @@ rep("""        results.push({
           chars: perLineLen.reduce((a, b) => a + b, 0),
           placement: placementOf(el, region, root, resolveStyleAttr, lines.length),
           region: region || '(default)',""")
-rep("""    finalizeDurationFlags(cueList);
-    finalizeCharFlags(cueList);
-""", """    finalizeDurationFlags(cueList);
-    finalizeCharFlags(cueList);
-    finalizeQcFlags(cueList);
-""")
+rep("""  function renderSidebarList() {
+    cueListContainer.innerHTML = '';""", """  function renderSidebarList() {
+    if (cueList.length && cueList[0].duration !== undefined) finalizeQcFlags(cueList);   // also follows the video's frame rate (gap check)
+    cueListContainer.innerHTML = '';""")
 rep("""      row.className = 'cue-item' + (cue.overlap ? ' overlap' : '');""", """      row.className = 'cue-item' + (cueKind(cue) ? ' has-' + cueKind(cue) : '');""")
 a = js.index("      if (cue.showRegionTag) {")
 b = js.index("      const textEl = document.createElement('span');\n      textEl.className = 'cue-text';")
 js = js[:a] + "      appendCueTags(timeEl, cue);\n\n" + js[b:]
 # filter chips: hide the ones with nothing to show (except All / Issues / the active one)
-rep("""      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'filter-chip'""", """      if (!count && !f.always && f.key !== currentFilter) return;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'filter-chip'""")
+rep("""      btn.className = 'filter-chip' + (f.key === currentFilter ? ' active' : '') + (f.cls ? ' ' + f.cls : '');""",
+    """      btn.className = 'filter-chip' + (f.key === currentFilter ? ' active' : '') + (f.cls ? ' ' + f.cls : '') + (count || f.key === 'all' ? '' : ' empty');
+      if (f.title) btn.title = f.title;""")
 
 
 # ---- Events tab hooks (events.js): the table follows the event list's filter, selection and playhead
@@ -165,7 +160,7 @@ rep("""    const row = cueListContainer.children[tlSelected];
     evSyncSel();
     return row;""")
 rep("""    if (firstEl) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }""", """    if (firstEl && !eventsMode) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }""", """    if (firstEl && !expanded) firstEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     evSyncActive();
   }""")
 
